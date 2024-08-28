@@ -114,45 +114,7 @@ section '.text' code readable executable
         invoke  GetTickCount
         mov     [last_tick],eax
 
-        invoke  CreateFont, 26,\
-                            0,\
-                            0,\
-                            0,\
-                            FW_BOLD,\
-                            FALSE,\
-                            FALSE,\
-                            FALSE,\
-                            ANSI_CHARSET,\
-                            OUT_TT_PRECIS,\
-                            CLIP_DEFAULT_PRECIS,\
-                            PROOF_QUALITY,\
-                            DEFAULT_PITCH+ FF_DONTCARE,\
-                            _font_name
 
-        mov     [logoFont], eax
-
-        invoke  CreateFont, 18,\
-                            0,\
-                            0,\
-                            0,\
-                            FW_DONTCARE,\
-                            FALSE,\
-                            FALSE,\
-                            FALSE,\
-                            ANSI_CHARSET,\
-                            OUT_TT_PRECIS,\
-                            CLIP_DEFAULT_PRECIS,\
-                            PROOF_QUALITY,\
-                            DEFAULT_PITCH+ FF_DONTCARE,\
-                            _font_name
-
-        mov     [mainFont], eax
-
-      ;  invoke  CreateSolidBrush, 0x2e2e2e
-      ;  mov     [brush], eax
-
-        invoke  CreatePen, PS_NULL, 1, 0
-        mov     [pen], eax
 
 
   msg_loop:    ; цикл сообщений
@@ -314,7 +276,6 @@ proc    drawMain uses edi
         pop     ebx
         shl     eax, 4
         mov     ebx, [rs.right]
-       ; sub     ebx, [rs.left]
         sub     ebx, eax
         shr     ebx, 1
         add     [rs.left], ebx
@@ -326,7 +287,7 @@ proc    drawMain uses edi
         stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], 0
 
 
-        cominvk  DDSBack, Unlock, ddsd
+        cominvk  DDSBack, Unlock, NULL
 
         ret
 endp
@@ -374,14 +335,36 @@ proc    drawStart uses edi
         mov         [startBtn.bottom], ebx
         stdcall     drawBtn, startBtn
 
-        cominvk  DDSBack, Unlock, ddsd
+        cominvk  DDSBack, Unlock, NULL
 
        ; mov     eax, [ddsd.dwSrcVBHandle]
        ; mov     [hdc], eax
 
+
+
         cominvk  DDSBack, GetDC, hdc
 
+
+        invoke  CreateFont, 32,\
+                            0,\
+                            0,\
+                            0,\
+                            FW_BOLD,\
+                            FALSE,\
+                            FALSE,\
+                            FALSE,\
+                            ANSI_CHARSET,\
+                            OUT_TT_PRECIS,\
+                            CLIP_DEFAULT_PRECIS,\
+                            PROOF_QUALITY,\
+                            DEFAULT_PITCH+ FF_DONTCARE,\
+                            _font_name
+
+        mov      [logoFont], eax
+
+
         invoke  SelectObject, [hdc], [logoFont]
+        mov     [tempFont], eax
 
        ; invoke   SetBkColor, [hdc], 0x343536
         invoke   SetBkMode, [hdc], TRANSPARENT
@@ -391,7 +374,8 @@ proc    drawStart uses edi
          mov      [rs.top], 120
          mov      [rs.bottom], 160
          invoke   DrawText, [hdc], _title, -1, rs, DT_CENTER+DT_VCENTER
-
+         invoke  SelectObject, [hdc], [tempFont]
+         invoke  DeleteObject, [logoFont]
         cominvk  DDSBack, ReleaseDC, [hdc]
 
         ret
@@ -402,19 +386,45 @@ endp
 
 proc    drawBtn uses edi eax ebx, button
 
+
+        invoke  CreateFont, 18,\
+                            0,\
+                            0,\
+                            0,\
+                            FW_DONTCARE,\
+                            FALSE,\
+                            FALSE,\
+                            FALSE,\
+                            ANSI_CHARSET,\
+                            OUT_TT_PRECIS,\
+                            CLIP_DEFAULT_PRECIS,\
+                            PROOF_QUALITY,\
+                            DEFAULT_PITCH+ FF_DONTCARE,\
+                            _font_name
+
+        mov     [mainFont], eax
+
+
+
         mov     ebx, [button]
 
         cominvk  DDSBack, GetDC, hdc
 
+        invoke  CreatePen, PS_NULL, 1, 0
+        mov     [pen], eax
+
         invoke  CreateSolidBrush, [ebx+24]
         mov     [brush], eax
+
         invoke  SelectObject, [hdc],eax; [brush]
+        mov     [tempBrush], eax
 
         invoke  SelectObject, [hdc], [pen]
+        mov     [tempPen], eax
 
         invoke  SelectObject, [hdc], [mainFont]
+        mov     [tempFont], eax
 
-       ; invoke   SetBrushColor, [hdc],0; [ebx+28]
 
         invoke   RoundRect, [hdc], [ebx], [ebx+4], [ebx+8], [ebx+12], 5, 5
 
@@ -435,7 +445,16 @@ proc    drawBtn uses edi eax ebx, button
         invoke   DrawText, [hdc], [ebx+16], -1, rSrc, DT_CENTER+DT_VCENTER+DT_SINGLELINE
 
 
+        invoke  SelectObject, [hdc], [tempFont]
+        invoke  DeleteObject, [mainFont]
+
+        invoke  SelectObject, [hdc], [tempBrush]
         invoke   DeleteObject, [brush]
+
+        invoke  SelectObject, [hdc], [tempPen]
+        invoke   DeleteObject, [pen]
+
+
         cominvk  DDSBack, ReleaseDC, [hdc]
 
         ret
@@ -722,6 +741,12 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         cmp     eax,WM_CLOSE
         je      .wmclose
 
+        cmp     eax,WM_GETMINMAXINFO
+        je      .wmgetminmaxinfo
+
+        cmp     eax,WM_ERASEBKGND
+        je      .wmerasebg
+
   .defwndproc:
         invoke  DefWindowProc,[hwnd],[wmsg],[wparam],[lparam]
         jmp     .finish
@@ -750,6 +775,16 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
   .wmpaint:
         call    onPaint
         jmp     .finish
+
+  .wmgetminmaxinfo:
+        mov     ebx, [lparam]
+        mov     dword [ebx+24], 780
+        mov     dword [ebx+28], 512
+        jmp     .finish
+
+   .wmerasebg:
+        jmp     .finish
+
 
   .wmclose:
         jmp     end_loop
@@ -866,6 +901,9 @@ section '.bss' readable writeable
   p     POINT
   last_tick dd ?
   curScreen dd 0
+  tempFont  dd 0
+  tempBrush dd 0
+  tempPen   dd 0
 
   logoFont      dd ?
   mainFont      dd ?
@@ -899,10 +937,10 @@ section '.idata' import data readable writeable
          SetTextColor, 'SetTextColor',\
          RoundRect, 'RoundRect',\
          SelectObject, 'SelectObject',\
+         DeleteObject, 'DeleteObject',\
          Rectangle, 'Rectangle',\
          SetBrushColor, 'SetDCBrushColor',\
          SetBkMode, 'SetBkMode',\
          CreateSolidBrush, 'CreateSolidBrush',\
          CreatePen, 'CreatePen',\
-         GetDeviceCaps, 'GetDeviceCaps',\
-         DeleteObject, 'DeleteObject'
+         GetDeviceCaps, 'GetDeviceCaps'
