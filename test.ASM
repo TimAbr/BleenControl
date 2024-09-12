@@ -98,23 +98,27 @@ section '.text' code readable executable
         test    eax, eax
         jnz     ddraw_error
 
+        cominvk DDraw,CreateSurface,\
+                ddsd,DDSPicture,NULL
+        test    eax, eax
+        jnz     ddraw_error
+
         cominvk DDSBack,SetClipper,\
                 [DDClipper]
         test    eax, eax
         jnz     ddraw_error
 
-        invoke  GetSystemMetrics, 78
-       ; invoke   SystemParametersInfoA,0x0030,0 , rs,0
-       ; mov      eax, [rs.right]
-       ; sub      eax, [rs.left]
-        and     eax, -16
+        invoke  SetThreadDpiAwarenessContext, -2
+        invoke  GetSystemMetrics,  SM_CXSCREEN
         mov     [sWidth], eax
         shl     [sWidth], 2
+        invoke  SetThreadDpiAwarenessContext, -1
 
         invoke  GetTickCount
         mov     [last_tick],eax
 
-
+        invoke  CreateCompressor, 4, NULL, Compressor
+        invoke  CreateDecompressor, 4, NULL, Decompressor
 
 
   msg_loop:    ; цикл сообщений
@@ -122,13 +126,26 @@ section '.text' code readable executable
                ; затем ОС вызывает функцию окна
         invoke  GetMessage,msg,NULL,0,0
         cmp     eax,1
-        jb      end_loop
+        jb      no_message
         jne     msg_loop
         invoke  TranslateMessage,msg
         invoke  DispatchMessage,msg
         jmp     msg_loop
 
+  no_message:
+        cmp     [curScreen], main_screen
+        jne     msg_loop
+        invoke  GetTickCount
+        mov     ebx,eax
+        sub     ebx,[last_tick]
+        cmp     ebx,20
+        jb      msg_loop
+        add     [last_tick],20
+        call    onPaint
 
+  sleep:
+        invoke  WaitMessage
+        jmp     msg_loop
 
   ddraw_error:
 
@@ -217,7 +234,6 @@ proc    drawMain uses edi
 
         invoke  GetClientRect, [hwnd], rs
 
-       ; shr     [rs.right], 2
          push    [rs.right]
          mov     [rs.right], 200
 
@@ -284,10 +300,99 @@ proc    drawMain uses edi
 
 
 .Skip:
+
         stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], 0
 
-
         cominvk  DDSBack, Unlock, NULL
+
+
+        stdcall GetScreenshot, [hwnd], [rs.left], [rs.top], [rs.right], [rs.bottom]
+
+
+        stdcall ShowImage, fileName, [rs.left], [rs.top], [rs.right], [rs.bottom]
+
+
+
+
+
+
+
+        ret
+endp
+
+
+
+
+
+proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
+
+
+
+        invoke  CreateFile, fileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL
+        mov    [hFile], eax
+
+
+        invoke  GetFileSizeEx, eax, temp
+
+        invoke  GlobalAlloc, GHND, [temp]
+        mov     [hbm], eax
+
+        invoke  GlobalLock, eax
+        mov    [pBmp], eax
+
+        invoke   ReadFile, [hFile], [pBmp], [temp], 0, NULL
+
+        mov      eax, [pBmp]
+        mov      ebx, [eax + 2]
+        sub      ebx, sizeof.BITMAPFILEHEADER+sizeof.BITMAPINFOHEADER
+        sub      [temp], sizeof.BITMAPFILEHEADER+sizeof.BITMAPINFOHEADER
+        add      eax, sizeof.BITMAPFILEHEADER+sizeof.BITMAPINFOHEADER
+
+        push    eax
+        invoke  Decompress, [Decompressor], eax, [temp], NULL, 0, temp1
+
+        invoke  GlobalAlloc, GHND, [temp1]
+        mov     [hbmDest], eax
+
+        invoke  GlobalLock, eax
+        mov    [pBmpDest], eax
+
+        cominvk  DDSBack, GetDC, hdc
+
+
+        add     [pBmp], sizeof.BITMAPFILEHEADER+sizeof.BITMAPINFOHEADER
+
+        pop     eax
+        invoke  Decompress, [Decompressor], eax, [temp], [pBmpDest], [temp1], temp1
+        invoke  GetLastError
+
+
+
+        invoke  GlobalUnlock, [pBmp]
+        invoke  GlobalFree, [hbm]
+
+
+        invoke  CreateCompatibleBitmap, [hdc], 1920, 1080
+        mov     [hbm], eax
+        invoke  GetObject, eax, sizeof.BITMAP, [pBmpDest]
+        invoke  SetDIBits, [hdc], [hbm], 0, 1080, [pBmpDest], bi ,0
+
+        invoke   CreateCompatibleDC, [hdc]
+        mov      [hdcPicture], eax
+        invoke  SelectObject, [hdcPicture], [hbm]
+
+        invoke  SetStretchBltMode, [hdc], HALFTONE
+        invoke  StretchBlt, [hdc], [left], [top], [right], [bottom], [hdcPicture], 0, 0, 1920, 1080, SRCCOPY
+
+
+
+        invoke  GlobalUnlock, [pBmpDest]
+        invoke  GlobalFree, [hbmDest]
+
+        cominvk  DDSBack, ReleaseDC, [hdc]
+        invoke  DeleteObject, [hdcPicture]
+
+        invoke  CloseHandle, [hFile]
 
         ret
 endp
@@ -337,8 +442,6 @@ proc    drawStart uses edi
 
         cominvk  DDSBack, Unlock, NULL
 
-       ; mov     eax, [ddsd.dwSrcVBHandle]
-       ; mov     [hdc], eax
 
 
 
@@ -366,16 +469,16 @@ proc    drawStart uses edi
         invoke  SelectObject, [hdc], [logoFont]
         mov     [tempFont], eax
 
-       ; invoke   SetBkColor, [hdc], 0x343536
         invoke   SetBkMode, [hdc], TRANSPARENT
         invoke   SetTextColor, [hdc], 0xFFFFFF
 
-         mov      [rs.left], 200
-         mov      [rs.top], 120
-         mov      [rs.bottom], 160
-         invoke   DrawText, [hdc], _title, -1, rs, DT_CENTER+DT_VCENTER
-         invoke  SelectObject, [hdc], [tempFont]
-         invoke  DeleteObject, [logoFont]
+        mov      [rs.left], 200
+        mov      [rs.top], 120
+        mov      [rs.bottom], 160
+        invoke   DrawText, [hdc], _title, -1, rs, DT_CENTER+DT_VCENTER
+        invoke  SelectObject, [hdc], [tempFont]
+        invoke  DeleteObject, [logoFont]
+
         cominvk  DDSBack, ReleaseDC, [hdc]
 
         ret
@@ -438,7 +541,6 @@ proc    drawBtn uses edi eax ebx, button
         mov      eax, [ebx+12]
         mov      [rSrc.bottom], eax
 
-       ; invoke   SetBkColor, [hdc], [ebx+28]
         invoke   SetBkMode, [hdc], TRANSPARENT
         invoke   SetTextColor, [hdc],[ebx+20]
 
@@ -717,6 +819,125 @@ endp
 
 
 
+proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
+
+        mov     ebx, esp
+
+        invoke  GetDC, NULL
+        push    eax  ;hdcScreen   -4
+
+        invoke  CreateCompatibleDC, [ebx-4]
+        push    eax  ;hdcMemDC    -8
+
+        invoke  CreateCompatibleBitmap, [ebx-4], 1920, 1080
+
+        push    eax  ;hbmScreen   -12
+
+        invoke  SelectObject, [ebx-8], eax
+
+        invoke  BitBlt, [ebx-8], 0, 0, 1920, 1080, [ebx-4], 0, 0, SRCCOPY
+
+        invoke  SetThreadDpiAwarenessContext, -2
+        invoke  GetCursorPos, p
+        invoke  DrawIcon, [ebx-8], [p.x], [p.y], [wc.hCursor]
+        invoke  SetThreadDpiAwarenessContext, -1
+
+        cominvk DDSBack, GetDC, hdc
+        invoke  SetStretchBltMode, [hdc], HALFTONE
+        invoke  StretchBlt, [hdc], [left], [top], [right], [bottom], [ebx-8], 0, 0, 1920, 1080, SRCCOPY
+        cominvk DDSBack, ReleaseDC, [hdc]
+
+        invoke  GetObject, [ebx-12], sizeof.BITMAP, bmpScreen
+
+
+        mov     [bi.biSize], sizeof.BITMAPINFOHEADER
+        mov     eax, [bmpScreen.bmWidth]
+        mov     [bi.biWidth], eax
+        mov     eax, [bmpScreen.bmHeight]
+        mov     [bi.biHeight], eax
+        mov     [bi.biPlanes], 1
+        mov     [bi.biBitCount], 32
+        mov     [bi.biCompression], BI_RGB
+        mov     [bi.biSizeImage], 0
+        mov     [bi.biXPelsPerMeter], 0
+        mov     [bi.biYPelsPerMeter], 0
+        mov     [bi.biClrUsed], 0
+        mov     [bi.biClrImportant], 0
+
+        mov     eax, [bmpScreen.bmWidth]
+        shl     eax, 5
+        add     eax, 31
+        shr     eax, 3
+        mul     [bmpScreen.bmHeight]
+        push    eax  ;dwBmpSize   -16
+
+        invoke  GlobalAlloc, GHND, eax
+        push    eax  ;hDIB        -20
+
+        invoke  GlobalLock, eax
+        push    eax  ;lpbitmap    -24
+
+
+        invoke  GetDIBits, [ebx-4], [ebx-12], 0, [bmpScreen.bmHeight], eax, bi, 0
+
+;
+        invoke  CreateFile, fileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL
+        push    eax  ;hFile       -28
+
+        push    dword [ebx-16] ;dwSizeOfDIB -32
+        mov     eax, sizeof.BITMAPFILEHEADER
+        add     eax, sizeof.BITMAPINFOHEADER
+        add     [ebx-16], eax
+        mov     [bmfHeader.bfOffBits], eax
+        mov     eax, [ebx-16]
+        mov     [bmfHeader.bfSize], eax
+        mov     [bmfHeader.bfType], 0x4D42
+
+        push    0       ;dwBytesWritten -36
+        push    0       ;CompressedBufferSize -40
+
+        sub     ebx, 40
+        invoke  Compress, [Compressor], [ebx+16], [bmfHeader.bfSize], 0, 0, ebx
+        add     ebx, 40
+
+        invoke  GlobalAlloc, GHND, [ebx-40]
+        push    eax  ;hBuf        -44
+
+        invoke  GlobalLock, eax
+        push    eax  ;lpBuf    -48
+
+        push    0    ;CompressedDataSize   -52
+
+        sub     ebx, 52
+        invoke  Compress, [Compressor], [ebx+28], [bmfHeader.bfSize], eax, [ebx+12], ebx
+        add     ebx, 52
+
+        invoke  WriteFile, [ebx-28], bmfHeader, sizeof.BITMAPFILEHEADER, [ebx-36], NULL
+        invoke  WriteFile, [ebx-28], bi, sizeof.BITMAPINFOHEADER, [ebx-36], NULL
+      ;  invoke  WriteFile, [ebx-28], [ebx-24], [ebx-16], [ebx-36], NULL
+        invoke  WriteFile, [ebx-28], [ebx-48], [ebx-52], [ebx-36], NULL
+
+        invoke  GlobalUnlock, [ebx-44]
+        invoke  GlobalFree, [ebx-44]
+
+        invoke  GlobalUnlock, [ebx-20]
+        invoke  GlobalFree, [ebx-20]
+        invoke  CloseHandle, [ebx-28]
+
+        invoke  DeleteObject, [ebx-12]
+        invoke  DeleteObject, [ebx-8]
+        invoke  ReleaseDC,NULL, [ebx-4]
+
+        mov     esp, ebx
+        ret
+
+endp
+
+
+
+
+
+
 
 
 proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
@@ -862,6 +1083,8 @@ section '.data' data readable writeable
 
   backBtnText  TCHAR 'Back', 0
 
+  fileName     TCHAR 'FRAME.BMP', 0
+
 
 section '.bss' readable writeable
 
@@ -904,6 +1127,8 @@ section '.bss' readable writeable
   tempFont  dd 0
   tempBrush dd 0
   tempPen   dd 0
+  temp      dd 0
+  temp1     dd 0
 
   logoFont      dd ?
   mainFont      dd ?
@@ -913,6 +1138,30 @@ section '.bss' readable writeable
   startBtn BUTTON 0, 0, 0, 0, startBtnText, 0xFFFFFF, 0x2e2e2e
   backBtn  BUTTON 0, 0, 0, 0, backBtnText, 0xFFFFFF, 0x343536
 
+  bmpScreen BITMAP
+  bmfHeader BITMAPFILEHEADER
+  bi        BITMAPINFOHEADER
+  hbm       dd ?
+  hdcPicture dd ?
+  pBmp       dd ?
+  hbmDest    dd ?
+  pBmpDest   dd ?
+  hFile      dd ?
+
+  picture  TCHAR 'FRAME.JPEG', 0
+
+  gdiPlusToken dd ?
+  gdipsi      dd 20 dup (?)
+  Compressor  dd ?
+  Decompressor  dd ?
+
+
+  CLSID   dw  0x557c, 0xf401,0x1a04,0x11d3,0x9a73,0x0000,0xf81e,0xf32e
+  ; db  0x59, 0x84, 0xFF, 0xE0, 0x28, 0xD4, 0x11, 0xCF, 0xAE, 0x66, 0x08, 0x00, 0x2B, 0x2E, 0x12, 0x62
+  ; db 128 dup (?)
+  ; db  0x55, 0x7c,0xf4, 0x06, 0x1a,0x04, 0x11,0xd3, 0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e
+  ; dw  0x557c, 0xf401,0x1a04,0x11d3,0x9a73,0x0000,0xf81e,0xf32e
+  ; db  0x59, 0x84, 0xFF, 0xE0, 0x28, 0xD4, 0x11, 0xCF, 0xAE, 0x66, 0x08, 0x00, 0x2B, 0x2E, 0x12, 0x62
 
 
 
@@ -922,15 +1171,19 @@ section '.idata' import data readable writeable
   library kernel32,'KERNEL32.DLL',\
           user32,'USER32.DLL',\
           ddraw,'DDRAW.DLL',\
-          gdi,'GDI32.DLL'
+          gdi,'GDI32.DLL',\
+          compress,'CABINET.DLL'
 
   include 'api\kernel32.inc'
   include 'api\user32.inc'
 
+
   import ddraw,\
-         DirectDrawCreate,'DirectDrawCreate'
+         DirectDrawCreate,'DirectDrawCreate',\
+         DDCopyBitmap,'DDCopyBitmap'
 
   import gdi,\
+         GetObject, 'GetObjectA',\
          CreateFont,'CreateFontA',\
          TextOut, 'TextOutW',\
          SetBkColor, 'SetBkColor',\
@@ -943,4 +1196,23 @@ section '.idata' import data readable writeable
          SetBkMode, 'SetBkMode',\
          CreateSolidBrush, 'CreateSolidBrush',\
          CreatePen, 'CreatePen',\
-         GetDeviceCaps, 'GetDeviceCaps'
+         GetDeviceCaps, 'GetDeviceCaps',\
+         CreateCompatibleDC, 'CreateCompatibleDC',\
+         SetStretchBltMode, 'SetStretchBltMode',\
+         StretchBlt,'StretchBlt',\
+         BitBlt, 'BitBlt',\
+         CreateCompatibleBitmap,'CreateCompatibleBitmap',\
+         GetDIBits, 'GetDIBits',\
+         SetDIBits, 'SetDIBits'
+
+  import gdiplus,\
+         GdiplusStartup, 'GdiplusStartup',\
+         Bitmap, 'GdipCreateBitmapFromHBITMAP',\
+         SaveImage, 'GdipSaveImageToFile',\
+         GdipLoadImageFromFile, 'GdipLoadImageFromFile'
+
+  import compress,\
+         CreateCompressor, 'CreateCompressor',\
+         CreateDecompressor, 'CreateDecompressor',\
+         Compress, 'Compress',\
+         Decompress, 'Decompress'
