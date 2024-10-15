@@ -1,0 +1,20 @@
+; FASM Editor
+
+include "test.ASM"
+
+if 2 * 2 = 5
+[options]
+  countAsm=7
+  countInc=2
+[asm]
+  asm1="test.ASM"
+  asm2="Screenshot.ASM"
+  asm3="Graph.ASM"
+  asm4="socket_consts.asm"
+  asm5="socket_funcs.asm"
+  asm6="socket_main.asm"
+  asm7="Client.asm"
+[inc]
+  inc1="help.inc"
+  inc2="Client.inc"
+end if
