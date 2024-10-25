@@ -17,6 +17,7 @@ proc Client.Init uses edx ecx ebx, serverIp, serverPort
 endp
 
 proc Client.Destroy
+     stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], Request.closeConnection, 4
      invoke closesocket, [Client.hTCPSock]
 .Finish:
      ret

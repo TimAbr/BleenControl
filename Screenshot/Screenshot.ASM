@@ -1,54 +1,50 @@
 proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
-
-
-
-        invoke  CreateFile, fileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL
-        mov    [hFile], eax
-
-
-        invoke  GetFileSizeEx, eax, temp
-
+        mov     [temp], 0
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4
+        
         invoke  GlobalAlloc, GHND, [temp]
         mov     [hbm], eax
-
         invoke  GlobalLock, eax
-        mov    [pBmp], eax
-
-        invoke   ReadFile, [hFile], [pBmp], [temp], 0, NULL
-
-        mov      eax, [pBmp]
-        mov      ebx, [eax + 2]
-        sub      ebx, sizeof.BITMAPFILEHEADER+sizeof.BITMAPINFOHEADER
-        sub      [temp], sizeof.BITMAPFILEHEADER+sizeof.BITMAPINFOHEADER
-        add      eax, sizeof.BITMAPFILEHEADER+sizeof.BITMAPINFOHEADER
-
-        push    eax
-        invoke  Decompress, [Decompressor], eax, [temp], NULL, 0, temp1
+        mov     [pBmp], eax
+        
+        mov     [temp1], 0
+.repit:        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], [pBmp], [temp]
+        add     [pBmp], eax
+        sub     [temp], eax
+        add     [temp1], eax
+        
+        cmp     [temp], 0
+        ja      .repit
+        
+        mov      eax, [temp1]
+        sub     [pBmp], eax
+        mov      [temp], eax
+        
+        mov     [temp1], 0
+        invoke  Decompress, [Decompressor], [pBmp], [temp], NULL, 0, temp1
 
         invoke  GlobalAlloc, GHND, [temp1]
         mov     [hbmDest], eax
 
         invoke  GlobalLock, eax
         mov    [pBmpDest], eax
+                
+        invoke  Decompress, [Decompressor], [pBmp], [temp], [pBmpDest], [temp1], temp1
 
-        cominvk  DDSBack, GetDC, hdc
-
-
-        add     [pBmp], sizeof.BITMAPFILEHEADER+sizeof.BITMAPINFOHEADER
-
-        pop     eax
-        invoke  Decompress, [Decompressor], eax, [temp], [pBmpDest], [temp1], temp1
-        invoke  GetLastError
-
-
-
-        invoke  GlobalUnlock, [pBmp]
+        invoke  GlobalUnlock, [hbm]
         invoke  GlobalFree, [hbm]
-
-
+        
+        
+        
+        cominvk DDSBack, GetDC, hdc
         invoke  CreateCompatibleBitmap, [hdc], 1920, 1080
         mov     [hbm], eax
-        invoke  GetObject, eax, sizeof.BITMAP, [pBmpDest]
+        invoke  GetObject, eax, sizeof.BITMAP, bmpScreen
+        mov     eax, [bmpScreen.bmBits]
+        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], bi, sizeof.BITMAPINFOHEADER
+        
         invoke  SetDIBits, [hdc], [hbm], 0, 1080, [pBmpDest], bi ,0
 
         invoke   CreateCompatibleDC, [hdc]
@@ -58,16 +54,31 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         invoke  SetStretchBltMode, [hdc], HALFTONE
         invoke  StretchBlt, [hdc], [left], [top], [right], [bottom], [hdcPicture], 0, 0, 1920, 1080, SRCCOPY
 
-
-
-        invoke  GlobalUnlock, [pBmpDest]
-        invoke  GlobalFree, [hbmDest]
-
         cominvk  DDSBack, ReleaseDC, [hdc]
+        
+        
+        invoke  GlobalUnlock, [hbmDest]
+        invoke  GlobalFree, [hbmDest]
+        
+        invoke  DeleteObject, [hbm]
+        
         invoke  DeleteObject, [hdcPicture]
 
-        invoke  CloseHandle, [hFile]
-
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], close_flag_buf, 4
+        
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
+        
+        mov      eax, [close_flag_buf]
+        add      eax, [close_flag]
+        cmp     eax, 0
+        je      .finish
+        
+        stdcall Client.Destroy
+        
+        mov     [curScreen], start_screen
+        mov     [close_flag], 0
+        mov     [close_flag_buf], 0
+.finish:
         ret
 endp
 
@@ -136,11 +147,9 @@ proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
 
         invoke  GetDIBits, [ebx-4], [ebx-12], 0, [bmpScreen.bmHeight], eax, bi, 0
 
-;
-        invoke  CreateFile, fileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL
-        push    eax  ;hFile       -28
 
-        push    dword [ebx-16] ;dwSizeOfDIB -32
+        push    dword [ebx-16]    ;dwSizeOfDIB -28 new value
+        
         mov     eax, sizeof.BITMAPFILEHEADER
         add     eax, sizeof.BITMAPINFOHEADER
         add     [ebx-16], eax
@@ -149,40 +158,80 @@ proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
         mov     [bmfHeader.bfSize], eax
         mov     [bmfHeader.bfType], 0x4D42
 
-        push    0       ;dwBytesWritten -36
-        push    0       ;CompressedBufferSize -40
+        push    0       ;CompressedBufferSize -32
 
-        sub     ebx, 40
-        invoke  Compress, [Compressor], [ebx+16], [bmfHeader.bfSize], 0, 0, ebx
-        add     ebx, 40
+        sub     ebx, 32
+        invoke  Compress, [Compressor], [ebx+8], [bmfHeader.bfSize], 0, 0, ebx
+        add     ebx, 32
 
-        invoke  GlobalAlloc, GHND, [ebx-40]
-        push    eax  ;hBuf        -44
+        invoke  GlobalAlloc, GHND, [ebx-32]
+        push    eax  ;hBuf        -36
 
         invoke  GlobalLock, eax
-        push    eax  ;lpBuf    -48
+        push    eax  ;lpBuf    -40
 
-        push    0    ;CompressedDataSize   -52
+        push    0    ;CompressedDataSize   -44
 
-        sub     ebx, 52
-        invoke  Compress, [Compressor], [ebx+28], [bmfHeader.bfSize], eax, [ebx+12], ebx
-        add     ebx, 52
+        sub     ebx, 44
+        invoke  Compress, [Compressor], [ebx+20], [bmfHeader.bfSize], eax, [ebx+12], ebx
+        add     ebx, 44
 
-        invoke  WriteFile, [ebx-28], bmfHeader, sizeof.BITMAPFILEHEADER, [ebx-36], NULL
-        invoke  WriteFile, [ebx-28], bi, sizeof.BITMAPINFOHEADER, [ebx-36], NULL
-      ;  invoke  WriteFile, [ebx-28], [ebx-24], [ebx-16], [ebx-36], NULL
-        invoke  WriteFile, [ebx-28], [ebx-48], [ebx-52], [ebx-36], NULL
+        ;invoke  WriteFile, [ebx-28], bmfHeader, sizeof.BITMAPFILEHEADER, [ebx-36], NULL
+        ;invoke  WriteFile, [ebx-28], bi, sizeof.BITMAPINFOHEADER, [ebx-36], NULL
+        ;invoke  WriteFile, [ebx-28], [ebx-48], [ebx-52], [ebx-36], NULL
 
-        invoke  GlobalUnlock, [ebx-44]
-        invoke  GlobalFree, [ebx-44]
+        ;stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], [bmfHeader], sizeof.BITMAPFILEHEADER
+        ;stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], [bi], sizeof.BITMAPINFOHEADER
+        push    ebx
+        sub     ebx, 44
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], ebx, 4
+        add     ebx, 44
+        pop     ebx
+        
+        
+        mov     [temp1], 0
+.repit:        
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], [ebx-40], [ebx-44]
+        add     [ebx-40], eax
+        sub     [ebx-44], eax
+        add     [temp1], eax
+        
+        cmp     dword[ebx-44], 0
+        ja      .repit
+        
+        
+        mov      eax, [temp1]
+        sub      [ebx-40], eax
+        mov      [ebx-44], eax
+        
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], bi, sizeof.BITMAPINFOHEADER
 
-        invoke  GlobalUnlock, [ebx-20]
-        invoke  GlobalFree, [ebx-20]
-        invoke  CloseHandle, [ebx-28]
+        invoke  GlobalUnlock, [ebx-40]
+        invoke  GlobalFree, [ebx-40]
+
+        invoke  GlobalUnlock, [ebx-24]
+        invoke  GlobalFree, [ebx-24]
+        ;invoke  CloseHandle, [ebx-28]
 
         invoke  DeleteObject, [ebx-12]
         invoke  DeleteObject, [ebx-8]
         invoke  ReleaseDC,NULL, [ebx-4]
+        
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
+        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], close_flag_buf, 4
+        
+        mov      eax, [close_flag_buf]
+        add      eax, [close_flag]
+        cmp     eax, 0
+        je      .finish
+        
+        stdcall Server.Destroy
+        
+        mov     [curScreen], start_screen
+        mov     [close_flag], 0
+        mov     [close_flag_buf], 0
+.finish:
 
         mov     esp, ebx
         ret

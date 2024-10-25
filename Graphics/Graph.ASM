@@ -1,3 +1,177 @@
+proc    drawAddTemplate uses eax ebx ecx edx, show_str
+
+    call    drawStart    
+    
+    cominvk  DDSBack, GetDC, hdc
+
+    
+    invoke  CreatePen, PS_NULL, 1, 0
+    mov     [pen], eax
+    
+    invoke  SelectObject, [hdc], eax
+    mov     [tempPen], eax
+
+    invoke  CreateSolidBrush, menu_color
+    mov     [brush], eax
+
+    invoke  SelectObject, [hdc],eax; [brush]
+    mov     [tempBrush], eax    
+
+    invoke  GetClientRect, [hwnd], rs
+    add     [rs.top], 30
+    sub     [rs.bottom], 30
+    mov     eax, [rs.right]
+    sub     eax, [rs.left]
+    shr     eax, 1
+    sub     eax, add_template_half_width
+    mov     [rs.left], eax
+    add     eax, add_template_width
+    mov     [rs.right], eax
+    
+    
+    invoke   RoundRect, [hdc], [rs.left], [rs.top], [rs.right], [rs.bottom], 15, 15
+    
+   
+    mov     eax, [rs.left]
+    add     eax, add_template_border  
+    mov     [backBtn.x], eax
+    mov     ebx, [rs.bottom]
+    sub     ebx, 30 + add_template_border
+    mov     [backBtn.y], ebx
+    add     eax, 120
+    mov     [backBtn.right], eax
+    add     ebx, 30
+    mov     [backBtn.bottom], ebx
+   
+    
+    mov     eax, cells_gap
+    mov     ebx, num_cells
+    dec     ebx
+    mul     ebx
+    neg     eax
+    add     eax, add_template_width
+    sub     eax, add_template_border
+    sub     eax, add_template_border
+    mov     ebx, num_cells
+    xor     edx, edx
+    div     ebx
+    
+    push    eax
+    
+    invoke  GetClientRect, [hwnd], rs
+    add     [rs.top], 60+40
+    
+    pop     eax
+    push    eax
+    
+    mov     ebx, 10
+    mul     ebx
+    shr     eax, 3
+    mov     ebx, [rs.top]
+    add     ebx, eax
+    mov     [rs.bottom], ebx
+    mov     ebx, 3
+    xor     edx, edx
+    div     ebx 
+    
+    
+    invoke  CreateFont, eax,\
+                            0,\
+                            0,\
+                            0,\
+                            FW_DONTCARE,\
+                            FALSE,\
+                            FALSE,\
+                            FALSE,\
+                            ANSI_CHARSET,\
+                            OUT_TT_PRECIS,\
+                            CLIP_DEFAULT_PRECIS,\
+                            PROOF_QUALITY,\
+                            DEFAULT_PITCH+ FF_DONTCARE,\
+                            _font_name
+
+    mov     [mainFont], eax
+    invoke  SelectObject, [hdc], eax
+    mov     [tempFont], eax
+    invoke   SetBkMode, [hdc], TRANSPARENT
+    invoke   SetTextColor, [hdc],0xffffff
+    
+    
+    mov     eax, [rs.right]
+    sub     eax, [rs.left]
+    shr     eax, 1
+    sub     eax, add_template_half_width
+    add     eax, add_template_border
+    mov     [rs.left], eax
+    pop     ebx
+    add     eax, ebx
+    mov     [rs.right], eax
+    add     ebx, cells_gap
+    
+    push    ebx
+    sub   [rs.top], 40
+    invoke   DrawText, [hdc], [show_str], -1, rs, DT_NOCLIP+DT_TOP+DT_LEFT+DT_SINGLELINE
+    add   [rs.top], 40
+    invoke  SelectObject, [hdc], [tempBrush]
+    invoke   DeleteObject, [brush]
+    
+    invoke  CreateSolidBrush, main_color
+    mov     [brush], eax
+
+    invoke  SelectObject, [hdc],eax
+    mov     [tempBrush], eax
+    
+    pop     eax
+    
+    mov ecx, num_cells
+    mov ebx, id
+.drawCells:
+    push  eax
+    push  ecx
+    push  ebx
+   
+    invoke   RoundRect, [hdc], [rs.left], [rs.top], [rs.right], [rs.bottom], 15, 15
+    pop   ebx
+    pop   ecx
+    push  ecx
+    mov   eax, num_cells+1
+    sub   eax, ecx
+    cmp   eax, [server_input_num] 
+    jg  .Skip 
+    invoke   DrawText, [hdc], ebx, -1, rs, DT_NOCLIP+DT_CENTER+DT_VCENTER+DT_SINGLELINE
+.Skip:    
+    add   ebx, 4
+    pop   ecx
+    pop   eax
+    
+    add   [rs.left], eax
+    add   [rs.right], eax
+
+    loop .drawCells  
+    
+    stdcall drawBtn, backBtn 
+     
+
+    invoke  SelectObject, [hdc], [tempFont]
+    invoke   DeleteObject, [mainFont]
+    
+    invoke  SelectObject, [hdc], [tempBrush]
+    invoke   DeleteObject, [brush]
+
+    invoke  SelectObject, [hdc], [tempPen]
+    invoke   DeleteObject, [pen]
+    
+    cominvk  DDSBack, ReleaseDC, [hdc]
+    
+    ret
+
+endp
+
+
+
+
+
+
 proc    drawBtn uses edi eax ebx, button
         locals
             mainf  dd   ?

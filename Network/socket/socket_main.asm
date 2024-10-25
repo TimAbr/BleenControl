@@ -59,10 +59,21 @@ proc ws_new_connection_structure, ip, port
   mov esi, eax
   
   mov     [esi + sockaddr_in.sin_family], AF_INET
+  
   invoke  htons, [port]
   mov     [esi + sockaddr_in.sin_port], ax 
+
+  cmp     [ip], 0
+  je     .server
   invoke  inet_addr, [ip]
+  jmp    .skip
+  
+.server:  
+  invoke  htonl, 0
+  
+.skip: 
   mov     [esi + sockaddr_in.sin_addr], eax
+
   
   mov eax, esi
 

@@ -1,11 +1,10 @@
-Client.YourIP    db '127.0.0.1', 0
+;Client.YourIP    db '127.0.0.1', 0
+Client.YourIP    db '192.168.1.11', 0
 Client.YourPort  dd 1234
+Client.YourP2PPort  dd 1111
 
 HOST   = 0
 PLAYER = 1
-Client.OffsetNumber = 6
-Client.MAX_SIZE_MSG = 65000
-Client.HEADER_SIZE  = 17
 
 Client.MSGTCPInit           dd 7
 Client.MSGUDPInit           dd 8

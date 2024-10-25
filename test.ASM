@@ -70,6 +70,8 @@ section '.text' code readable executable
         test    eax, eax
         jnz     ddraw_error
 
+        
+        ;создание клипера для контроля выхода за границы окна
         cominvk DDraw,CreateClipper,\
                 0,DDClipper,NULL
         test    eax, eax
@@ -84,7 +86,9 @@ section '.text' code readable executable
                 [DDClipper]
         test    eax, eax
         jnz     ddraw_error
-
+        
+        
+        ;создание буферной поверхности
         mov     [ddsd.dwSize],sizeof.DDSURFACEDESC
         mov     [ddsd.dwFlags],DDSD_CAPS+DDSD_HEIGHT+DDSD_WIDTH
         mov     [ddsd.ddsCaps.dwCaps], DDSCAPS_OFFSCREENPLAIN
@@ -98,16 +102,12 @@ section '.text' code readable executable
         test    eax, eax
         jnz     ddraw_error
 
-        cominvk DDraw,CreateSurface,\
-                ddsd,DDSPicture,NULL
-        test    eax, eax
-        jnz     ddraw_error
-
         cominvk DDSBack,SetClipper,\
                 [DDClipper]
         test    eax, eax
         jnz     ddraw_error
 
+        ;считывание ширины экрана
         invoke  SetThreadDpiAwarenessContext, -2
         invoke  GetSystemMetrics,  SM_CXSCREEN
         mov     [sWidth], eax
@@ -117,14 +117,31 @@ section '.text' code readable executable
         invoke  GetTickCount
         mov     [last_tick],eax
 
+        ;создание компрессора для сжатия изображений
         invoke  CreateCompressor, 4, NULL, Compressor
         invoke  CreateDecompressor, 4, NULL, Decompressor
         
+        ;инициализация уникального id клиента
+        stdcall Client.Init, Client.YourIP, [Client.YourPort]
         
-        ;stdcall Client.Init, Client.YourIP, [Client.YourPort]
-        ;stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], fileName1, 9
-        ;stdcall Client.Destroy
+        invoke  CreateFile, fileSettings, GENERIC_READ+GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL
+        mov    [hfileSettings], eax
+        invoke  GetLastError
+        cmp     eax, 183
+        je      .exists
+.getID:
+        ;получение id от сервера
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], Request.getId, 4        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], your_id, 16
+        mov [temp], 0
+        invoke  WriteFile, [hfileSettings], your_id, 16, temp, NULL
+        jmp .skip
+.exists:
+        ;чтение id из файла настроек
+        invoke   ReadFile, [hfileSettings], your_id, 16, 0, NULL
         
+.skip:  
+        stdcall Client.Destroy
         
 
 
@@ -133,25 +150,10 @@ section '.text' code readable executable
                ; затем ОС вызывает функцию окна
         invoke  GetMessage,msg,NULL,0,0
         cmp     eax,1
-        jb      no_message
+        jb      end_loop
         jne     msg_loop
         invoke  TranslateMessage,msg
         invoke  DispatchMessage,msg
-        jmp     msg_loop
-
-  no_message:
-        cmp     [curScreen], main_screen
-        jne     msg_loop
-        invoke  GetTickCount
-        mov     ebx,eax
-        sub     ebx,[last_tick]
-        cmp     ebx,20
-        jb      msg_loop
-        add     [last_tick],20
-        call    onPaint
-
-  sleep:
-        invoke  WaitMessage
         jmp     msg_loop
 
   ddraw_error:
@@ -167,6 +169,9 @@ section '.text' code readable executable
         invoke  MessageBox,NULL,eax,NULL,MB_ICONERROR+MB_OK
 
   end_loop:
+  
+        mov     [close_flag], 1
+        call    onPaint
 
         cmp     [DDSBack],0
         je      back_surface_released
@@ -189,7 +194,7 @@ section '.text' code readable executable
 
 
 
-
+;функция отрисовки всех окон
 proc onPaint
 
 .startScreen:
@@ -215,6 +220,8 @@ proc onPaint
         jne     .Skip
         call    drawMain
         jmp     .Skip
+        
+;двойная буферизация        
 .Skip:
 
         invoke  GetClientRect, [hwnd], rSrc
@@ -238,170 +245,35 @@ proc onPaint
 endp
 
 
-proc    drawAddTemplate uses eax
-
-    call    drawStart
-    
-    
-    invoke  CreateFont, 18,\
-                            0,\
-                            0,\
-                            0,\
-                            FW_DONTCARE,\
-                            FALSE,\
-                            FALSE,\
-                            FALSE,\
-                            ANSI_CHARSET,\
-                            OUT_TT_PRECIS,\
-                            CLIP_DEFAULT_PRECIS,\
-                            PROOF_QUALITY,\
-                            DEFAULT_PITCH+ FF_DONTCARE,\
-                            _font_name
-
-    mov     [mainFont], eax
-    
-    
-    cominvk  DDSBack, GetDC, hdc
-
-    
-    invoke  CreatePen, PS_NULL, 1, 0
-    mov     [pen], eax
-    
-    invoke  SelectObject, [hdc], eax
-    mov     [tempPen], eax
-
-    invoke  CreateSolidBrush, 0x1f1f1f
-    mov     [brush], eax
-
-    invoke  SelectObject, [hdc],eax; [brush]
-    mov     [tempBrush], eax
-
-    invoke  SelectObject, [hdc], [mainFont]
-    mov     [tempFont], eax
-
-    invoke  GetClientRect, [hwnd], rs
-    add     [rs.top], 30
-    sub     [rs.bottom], 30
-    mov     eax, [rs.right]
-    sub     eax, [rs.left]
-    shr     eax, 1
-    sub     eax, add_template_half_width
-    mov     [rs.left], eax
-    add     eax, add_template_width
-    mov     [rs.right], eax
-    
-    
-    invoke   RoundRect, [hdc], [rs.left], [rs.top], [rs.right], [rs.bottom], 15, 15
-    
-   
-    mov     eax, [rs.left]
-    add     eax, add_template_border  
-    mov     [backBtn.x], eax
-    mov     ebx, [rs.bottom]
-    sub     ebx, 30 + add_template_border
-    mov     [backBtn.y], ebx
-    add     eax, 120
-    mov     [backBtn.right], eax
-    add     ebx, 30
-    mov     [backBtn.bottom], ebx
-   
-    
-    mov     eax, cells_gap
-    mov     ebx, num_cells
-    dec     ebx
-    mul     ebx
-    neg     eax
-    add     eax, add_template_width
-    sub     eax, add_template_border
-    sub     eax, add_template_border
-    mov     ebx, num_cells
-    xor     edx, edx
-    div     ebx
-    
-    push    eax
-    
-    invoke  GetClientRect, [hwnd], rs
-    add     [rs.top], 60
-    
-    pop     eax
-    push    eax
-    
-    mov     ebx, 10
-    mul     ebx
-    shr     eax, 3
-    mov     ebx, [rs.top]
-    add     ebx, eax
-    mov     [rs.bottom], ebx
-    
-    mov     eax, [rs.right]
-    sub     eax, [rs.left]
-    shr     eax, 1
-    sub     eax, add_template_half_width
-    add     eax, add_template_border
-    mov     [rs.left], eax
-    pop     ebx
-    add     eax, ebx
-    mov     [rs.right], eax
-    add     ebx, cells_gap
-    
-    push    ebx
-    
-    invoke  SelectObject, [hdc], [tempBrush]
-    invoke   DeleteObject, [brush]
-    
-    invoke  CreateSolidBrush, 0x2e2e2e
-    mov     [brush], eax
-
-    invoke  SelectObject, [hdc],eax
-    mov     [tempBrush], eax
-    
-    pop     eax
-    mov ecx, num_cells
-    mov ebx, id
-.drawCells:
-    push  ecx
-    push  eax
-    push  ebx
-    invoke   RoundRect, [hdc], [rs.left], [rs.top], [rs.right], [rs.bottom], 15, 15
-    pop   ebx
-    invoke   DrawText, [hdc], ebx, -1, rs, DT_NOCLIP+DT_CENTER+DT_VCENTER+DT_SINGLELINE
-    add   ebx, 4
-    pop   eax
-    pop   ecx
-    add   [rs.left], eax
-    add   [rs.right], eax
-
-    loop .drawCells  
-    
-    stdcall drawBtn, backBtn 
-     
-
-    invoke  SelectObject, [hdc], [tempFont]
-    invoke   DeleteObject, [mainFont]
-    
-    invoke  SelectObject, [hdc], [tempBrush]
-    invoke   DeleteObject, [brush]
-
-    invoke  SelectObject, [hdc], [tempPen]
-    invoke   DeleteObject, [pen]
-    
-    cominvk  DDSBack, ReleaseDC, [hdc]
-    
-    ret
-
-endp
-
-
 
 proc  drawAddServer uses eax ebx
-    call    drawAddTemplate
+    stdcall    drawAddTemplate, server_input_id
     ret
 endp
 
 
 
 proc  drawAddClient uses eax
-    call    drawAddTemplate
+    mov   [server_input_num], num_cells
+    stdcall    drawAddTemplate, client_id
+    mov   [server_input_num], 0
+    invoke  GetTickCount
+    sub   eax, [last_tick]
+    cmp   eax, 1000
+    jb    .finish
+    add   [last_tick], eax
+    stdcall Client.Init, Client.YourIP, [Client.YourPort]
+    stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], Request.serverCondition, 4        
+    stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], id, 16
+    stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], isReady, 4
+    stdcall Client.Destroy
+    
+    cmp [isReady], 0
+    je  .finish
+    stdcall Server.Init
+    mov    [mode], client_mode
+    mov  [curScreen], main_screen
+.finish:
     ret
 endp
 
@@ -424,13 +296,13 @@ proc    drawMain uses edi
          push    [rs.right]
          mov     [rs.right], 200
 
-        stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], 0x2e2e2e
+        stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], main_color
          pop       [rs.right]
          sub       [rs.right], 200
 
         mov     [rs.left], 200
 
-        stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], 0x343536
+        stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], sec_color
 
 
 
@@ -492,11 +364,15 @@ proc    drawMain uses edi
 
         cominvk  DDSBack, Unlock, NULL
 
-
+        cmp   [mode], client_mode
+        jne   .server
         stdcall GetScreenshot, [hwnd], [rs.left], [rs.top], [rs.right], [rs.bottom]
+        jmp   .finish
+.server:
+        
+        stdcall ShowImage, fileName, [rs.left], [rs.top], [rs.right], [rs.bottom]
+.finish:
 
-
-        ;stdcall ShowImage, fileName, [rs.left], [rs.top], [rs.right], [rs.bottom]
 
         ret
 endp
@@ -519,7 +395,7 @@ proc    drawStart uses edi
 
         invoke  GetClientRect, [hwnd], rs
 
-        stdcall    drawRect, 0, 0, [rs.right], [rs.bottom], 0x2e2e2e
+        stdcall    drawRect, 0, 0, [rs.right], [rs.bottom], main_color
 
         push    [rs.right]
         push    [rs.bottom]
@@ -528,7 +404,7 @@ proc    drawStart uses edi
         sub     [rs.right], 200
 
 
-        stdcall    drawRect, 100, 75, [rs.right], [rs.bottom], 0x343536
+        stdcall    drawRect, 100, 75, [rs.right], [rs.bottom], sec_color
 
         pop         ebx
         pop         eax
@@ -588,6 +464,7 @@ proc    drawStart uses edi
         mov      [rs.top], 120
         mov      [rs.bottom], 160
         invoke   DrawText, [hdc], _title, -1, rs, DT_CENTER+DT_VCENTER
+
         invoke  SelectObject, [hdc], [tempFont]
         invoke  DeleteObject, [logoFont]
 
@@ -628,6 +505,9 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
 
         cmp     eax,WM_ERASEBKGND
         je      .wmerasebg
+        
+        cmp     eax,WM_CHAR
+        je      .wmchar
 
   .defwndproc:
         invoke  DefWindowProc,[hwnd],[wmsg],[wparam],[lparam]
@@ -638,7 +518,6 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         jmp     .finish
 
   .wmdestroy:
-
         invoke  PostQuitMessage,0
         xor     eax,eax
         jmp     .finish
@@ -649,10 +528,22 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         stdcall checkButtons, [lparam]
         jmp     .finish
 
+
+
+
   .wmkeydown:
         cmp     [wparam],VK_ESCAPE
         jne     .finish
         jmp     .wmdestroy
+  
+  .wmchar:
+        cmp     [curScreen], server_screen
+        jne     .finish
+        stdcall     inputID,[wparam]
+        jmp     .finish 
+        
+
+
 
   .wmpaint:
         call    onPaint
@@ -678,6 +569,64 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
 endp
 
 
+;обработка нажатий клавиш при вводе id
+proc    inputID, wparam
+
+.enter_button:
+    cmp   [wparam], 0x0D
+    jne   .backspace
+    
+    cmp   [server_input_num], num_cells
+    jne   .finish
+    
+    stdcall Client.Init, Client.YourIP, [Client.YourPort]
+    stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], Request.sendID.server, 4        
+    stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], id, 16
+    stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], ip_addr, 32
+    stdcall Client.Destroy
+    
+    cmp   [ip_addr], 0
+    jz    .error_ip
+    
+    mov   [curScreen], main_screen
+    stdcall Client.Init, ip_addr, [Server.YourPort]
+    
+    mov    [mode], server_mode
+    
+    jmp   .finish
+.error_ip:
+    mov   [server_input_num], 0
+    jmp   .finish
+.backspace:
+    cmp   [wparam], 0x08
+    jne   .other
+    
+    mov   eax, [server_input_num]
+    test  eax, eax
+    jz    .finish
+    dec   [server_input_num]
+    
+    jmp   .finish
+.other:
+
+    cmp   [wparam],'0'
+    jb    .finish
+    cmp   [wparam], '9'
+    ja    .finish 
+    mov   eax, [server_input_num]
+    cmp   eax, num_cells
+    je    .finish
+    shl   eax, 2
+    inc   [server_input_num]
+    mov   bx, word[wparam] 
+    mov   word[id+eax], bx
+    
+.finish:   
+    ret
+endp
+
+
+;обработка нажатия кнопок
 proc    checkButtons uses eax, lparam
 
         movsx   eax, word [lparam]
@@ -719,6 +668,18 @@ startScreen:
 
 
         mov     [curScreen], client_screen
+        
+        mov     ecx, 4
+        mov     ebx, 0        
+.copy_id:
+        mov     eax, dword[your_id+ebx]
+        mov     dword [id+ebx], eax
+        add     ebx, 4
+        loop    .copy_id
+        stdcall Client.Init, Client.YourIP, [Client.YourPort]
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], Request.sendID.client, 4        
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], your_id, 16
+        stdcall Client.Destroy
 
         jmp     finish
 
@@ -740,8 +701,10 @@ mainScreen:
         cmp     ebx, [backBtn.bottom]
         ja      finish
 
-
+        mov     [close_flag], 1
+        call    onPaint
         mov     [curScreen], start_screen
+        
 
         jmp     finish
 
@@ -786,7 +749,11 @@ clientScreen:
         ja      finish
 
 
-        mov     [curScreen], start_screen
+        mov     [curScreen], start_screen 
+        stdcall Client.Init, Client.YourIP, [Client.YourPort]
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], Request.closeID, 4        
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], your_id, 16
+        stdcall Client.Destroy                                 
 
         jmp     finish
 
@@ -814,14 +781,23 @@ section '.data' data readable writeable
 
   fileName     TCHAR 'FRAME.BMP', 0
   fileName1    db    'FRAME.BMP', 0
+  fileSettings  TCHAR 'Settings_id.txt',0
   
-  id  TCHAR     'a',0,'b',0,'c',0,'d',0
+  id  TCHAR     '1',0,'2',0,'3',0,'4',0
+  your_id  TCHAR     '1',0,'2',0,'3',0,'4',0
+  client_id TCHAR   'Your personal ID:',0
+  server_input_id TCHAR  'Input the id of the client:',0
+  
+  host_name db 256 dup (?)
+  ip_addr   db 32 dup (0)
   
   
 
 
 section '.bss' readable writeable
 
+  server_input_num  dd  0
+  
   hwnd dd  ?
 
   wc WNDCLASS 0,\ ; стиль окна по умолчанию             ; структура, определяющая класс окна
@@ -839,6 +815,8 @@ section '.bss' readable writeable
 
   ddsd  DDSURFACEDESC
   ddscaps DDSCAPS
+  
+  host  hostent
 
   DDraw DirectDraw
   DDSMain DirectDrawSurface
@@ -849,6 +827,8 @@ section '.bss' readable writeable
   ps PAINTSTRUCT
   hdc dd ?
   hbr dd ?
+  
+  hfileSettings dd ?
 
   sWidth dd 1920
   sHeight dd 1080
@@ -869,9 +849,9 @@ section '.bss' readable writeable
   pen           dd ?
   brush         dd ?
 
-  serverBtn BUTTON 0, 0, 0, 0, serverBtnText, 0xFFFFFF, 0x2e2e2e
-  clientBtn BUTTON 0, 0, 0, 0, clientBtnText, 0xFFFFFF, 0x2e2e2e
-  backBtn  BUTTON 0, 0, 0, 0, backBtnText, 0xFFFFFF, 0x343536
+  serverBtn BUTTON 0, 0, 0, 0, serverBtnText, 0xFFFFFF, main_color
+  clientBtn BUTTON 0, 0, 0, 0, clientBtnText, 0xFFFFFF, main_color
+  backBtn  BUTTON 0, 0, 0, 0, backBtnText, 0xFFFFFF, main_color
 
   bmpScreen BITMAP
   bmfHeader BITMAPFILEHEADER
@@ -891,15 +871,6 @@ section '.bss' readable writeable
   Decompressor  dd ?
 
 
-  CLSID   dw  0x557c, 0xf401,0x1a04,0x11d3,0x9a73,0x0000,0xf81e,0xf32e
-  ; db  0x59, 0x84, 0xFF, 0xE0, 0x28, 0xD4, 0x11, 0xCF, 0xAE, 0x66, 0x08, 0x00, 0x2B, 0x2E, 0x12, 0x62
-  ; db 128 dup (?)
-  ; db  0x55, 0x7c,0xf4, 0x06, 0x1a,0x04, 0x11,0xd3, 0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e
-  ; dw  0x557c, 0xf401,0x1a04,0x11d3,0x9a73,0x0000,0xf81e,0xf32e
-  ; db  0x59, 0x84, 0xFF, 0xE0, 0x28, 0xD4, 0x11, 0xCF, 0xAE, 0x66, 0x08, 0x00, 0x2B, 0x2E, 0x12, 0x62
-
-
-
 
 section '.idata' import data readable writeable
 
@@ -908,13 +879,17 @@ section '.idata' import data readable writeable
           ddraw,'DDRAW.DLL',\
           gdi,'GDI32.DLL',\
           compress,'CABINET.DLL',\
-          wsock32,  'WSOCK32.DLL'
+          wsock32,  'WSOCK32.DLL',\
+          ws2tcpip, 'WS2_32.DLL'
           
 
   include 'api\kernel32.inc'
   include 'api\user32.inc'
   include 'api\wsock32.inc'
 
+  import ws2tcpip,\
+         inet_ntop,'inet_ntop'
+         
 
   import ddraw,\
          DirectDrawCreate,'DirectDrawCreate',\
