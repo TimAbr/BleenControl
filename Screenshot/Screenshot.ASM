@@ -1,16 +1,18 @@
 proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
+        
+        invoke WaitForSingleObject, [thread_recieve], 100000
+        
+        invoke  CreateThread, 0, 0, toScreen, thread_rect_2, 0, 0
+        mov     [thread_output], eax
+          
+        
         mov     [temp], 0
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4
         
-        invoke  GlobalAlloc, GHND, [temp]
-        mov     [hbm], eax
-        invoke  GlobalLock, eax
-        mov     [pBmp], eax
-        
         mov     [temp1], 0
 .repit:        
-        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], [pBmp], [temp]
-        add     [pBmp], eax
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], [lpBuf], [temp]
+        add     [lpBuf], eax
         sub     [temp], eax
         add     [temp1], eax
         
@@ -18,52 +20,13 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         ja      .repit
         
         mov      eax, [temp1]
-        sub     [pBmp], eax
+        sub     [lpBuf], eax
         mov      [temp], eax
         
         mov     [temp1], 0
-        invoke  Decompress, [Decompressor], [pBmp], [temp], NULL, 0, temp1
-
-        invoke  GlobalAlloc, GHND, [temp1]
-        mov     [hbmDest], eax
-
-        invoke  GlobalLock, eax
-        mov    [pBmpDest], eax
-                
-        invoke  Decompress, [Decompressor], [pBmp], [temp], [pBmpDest], [temp1], temp1
-
-        invoke  GlobalUnlock, [hbm]
-        invoke  GlobalFree, [hbm]
-        
-        
-        
-        cominvk DDSBack, GetDC, hdc
-        invoke  CreateCompatibleBitmap, [hdc], 1920, 1080
-        mov     [hbm], eax
-        invoke  GetObject, eax, sizeof.BITMAP, bmpScreen
-        mov     eax, [bmpScreen.bmBits]
         
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], bi, sizeof.BITMAPINFOHEADER
         
-        invoke  SetDIBits, [hdc], [hbm], 0, 1080, [pBmpDest], bi ,0
-
-        invoke   CreateCompatibleDC, [hdc]
-        mov      [hdcPicture], eax
-        invoke  SelectObject, [hdcPicture], [hbm]
-
-        invoke  SetStretchBltMode, [hdc], HALFTONE
-        invoke  StretchBlt, [hdc], [left], [top], [right], [bottom], [hdcPicture], 0, 0, 1920, 1080, SRCCOPY
-
-        cominvk  DDSBack, ReleaseDC, [hdc]
-        
-        
-        invoke  GlobalUnlock, [hbmDest]
-        invoke  GlobalFree, [hbmDest]
-        
-        invoke  DeleteObject, [hbm]
-        
-        invoke  DeleteObject, [hdcPicture]
-
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], close_flag_buf, 4
         
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
@@ -71,151 +34,110 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         mov      eax, [close_flag_buf]
         add      eax, [close_flag]
         cmp     eax, 0
-        je      .finish
+        je      .skip
         
         stdcall Client.Destroy
         
         mov     [curScreen], start_screen
         mov     [close_flag], 0
         mov     [close_flag_buf], 0
-.finish:
+        jmp      .finish
+.skip:          
+        
+        mov     eax, [bottom]
+        mov     [thread_rect_2+12], eax
+        mov     eax, [right]
+        mov     [thread_rect_2+8], eax
+        mov     eax, [top]
+        mov     [thread_rect_2+4], eax
+        mov     eax, [left]
+        mov     [thread_rect_2], eax
+        
+        invoke  CreateThread, 0, 0, recieve_tcp, [temp], 0, 0
+        mov     [thread_recieve], eax
+.finish:                
         ret
+endp
+
+
+
+proc recieve_tcp uses eax ebx ecx edx, size
+
+        cmp     [minimized], 0
+        jnz     .skipDraw
+        
+        invoke WaitForSingleObject, [thread_output], 100000
+
+        invoke  Decompress, [Decompressor], [lpBuf], [size], [lpbitmap], [dwBmpSize], temp_recieve
+       
+        invoke  SetDIBits, [hdcMemDC], [hbmScreen], 0, 1080, [lpbitmap], bi ,0
+                
+
+.skipDraw:        
+
+    ret
+
 endp
 
 
 
 
 
-proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
 
-        mov     ebx, esp
+proc toScreen uses eax ebx ecx edx, rect
 
-        invoke  GetDC, NULL
-        push    eax  ;hdcScreen   -4
+    cominvk DDSBack, GetDC, hdc
+    invoke  SetStretchBltMode, [hdc], HALFTONE
+    mov     eax, [rect]
+    invoke  StretchBlt, [hdc], [eax], [eax+4], [eax+8], [eax+12], [hdcMemDC], 0, 0, 1920, 1080, SRCCOPY
+    cominvk DDSBack, ReleaseDC, [hdc]
+    ret
 
-        invoke  CreateCompatibleDC, [ebx-4]
-        push    eax  ;hdcMemDC    -8
-
-        invoke  CreateCompatibleBitmap, [ebx-4], 1920, 1080
-
-        push    eax  ;hbmScreen   -12
-
-        invoke  SelectObject, [ebx-8], eax
-
-        invoke  BitBlt, [ebx-8], 0, 0, 1920, 1080, [ebx-4], 0, 0, SRCCOPY
-
-        invoke  SetThreadDpiAwarenessContext, -2
-        invoke  GetCursorPos, p
-        invoke  DrawIcon, [ebx-8], [p.x], [p.y], [wc.hCursor]
-        invoke  SetThreadDpiAwarenessContext, -1
-
-        cominvk DDSBack, GetDC, hdc
-        invoke  SetStretchBltMode, [hdc], HALFTONE
-        invoke  StretchBlt, [hdc], [left], [top], [right], [bottom], [ebx-8], 0, 0, 1920, 1080, SRCCOPY
-        cominvk DDSBack, ReleaseDC, [hdc]
-
-        invoke  GetObject, [ebx-12], sizeof.BITMAP, bmpScreen
+endp
 
 
-        mov     [bi.biSize], sizeof.BITMAPINFOHEADER
-        mov     eax, [bmpScreen.bmWidth]
-        mov     [bi.biWidth], eax
-        mov     eax, [bmpScreen.bmHeight]
-        mov     [bi.biHeight], eax
-        mov     [bi.biPlanes], 1
-        mov     [bi.biBitCount], 32
-        mov     [bi.biCompression], BI_RGB
-        mov     [bi.biSizeImage], 0
-        mov     [bi.biXPelsPerMeter], 0
-        mov     [bi.biYPelsPerMeter], 0
-        mov     [bi.biClrUsed], 0
-        mov     [bi.biClrImportant], 0
 
-        mov     eax, [bmpScreen.bmWidth]
-        shl     eax, 5
-        add     eax, 31
-        shr     eax, 3
-        mul     [bmpScreen.bmHeight]
-        push    eax  ;dwBmpSize   -16
+proc send_tcp uses eax ebx ecx edx, size
 
-        invoke  GlobalAlloc, GHND, eax
-        push    eax  ;hDIB        -20
+        mov     eax, [size]
+        mov     [temp1], eax
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
 
-        invoke  GlobalLock, eax
-        push    eax  ;lpbitmap    -24
-
-
-        invoke  GetDIBits, [ebx-4], [ebx-12], 0, [bmpScreen.bmHeight], eax, bi, 0
-
-
-        push    dword [ebx-16]    ;dwSizeOfDIB -28 new value
         
-        mov     eax, sizeof.BITMAPFILEHEADER
-        add     eax, sizeof.BITMAPINFOHEADER
-        add     [ebx-16], eax
-        mov     [bmfHeader.bfOffBits], eax
-        mov     eax, [ebx-16]
-        mov     [bmfHeader.bfSize], eax
-        mov     [bmfHeader.bfType], 0x4D42
-
-        push    0       ;CompressedBufferSize -32
-
-        sub     ebx, 32
-        invoke  Compress, [Compressor], [ebx+8], [bmfHeader.bfSize], 0, 0, ebx
-        add     ebx, 32
-
-        invoke  GlobalAlloc, GHND, [ebx-32]
-        push    eax  ;hBuf        -36
-
-        invoke  GlobalLock, eax
-        push    eax  ;lpBuf    -40
-
-        push    0    ;CompressedDataSize   -44
-
-        sub     ebx, 44
-        invoke  Compress, [Compressor], [ebx+20], [bmfHeader.bfSize], eax, [ebx+12], ebx
-        add     ebx, 44
-
-        ;invoke  WriteFile, [ebx-28], bmfHeader, sizeof.BITMAPFILEHEADER, [ebx-36], NULL
-        ;invoke  WriteFile, [ebx-28], bi, sizeof.BITMAPINFOHEADER, [ebx-36], NULL
-        ;invoke  WriteFile, [ebx-28], [ebx-48], [ebx-52], [ebx-36], NULL
-
-        ;stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], [bmfHeader], sizeof.BITMAPFILEHEADER
-        ;stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], [bi], sizeof.BITMAPINFOHEADER
-        push    ebx
-        sub     ebx, 44
-        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], ebx, 4
-        add     ebx, 44
-        pop     ebx
-        
+        invoke  GetTickCount
+        mov     [ticks_send], eax
         
         mov     [temp1], 0
-.repit:        
-        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], [ebx-40], [ebx-44]
-        add     [ebx-40], eax
-        sub     [ebx-44], eax
+        
+        push    [lpBuf]
+.repit: 
+       
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], [lpBuf], [size]
+
+        
+        add     [lpBuf], eax
+        sub     [size], eax
         add     [temp1], eax
         
-        cmp     dword[ebx-44], 0
+        cmp     dword[size], 0
         ja      .repit
         
-        
         mov      eax, [temp1]
-        sub      [ebx-40], eax
-        mov      [ebx-44], eax
+        sub      [lpBuf], eax
+        mov      [size], eax
         
+        pop       [lpBuf]
+        
+
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], bi, sizeof.BITMAPINFOHEADER
 
-        invoke  GlobalUnlock, [ebx-40]
-        invoke  GlobalFree, [ebx-40]
 
-        invoke  GlobalUnlock, [ebx-24]
-        invoke  GlobalFree, [ebx-24]
-        ;invoke  CloseHandle, [ebx-28]
-
-        invoke  DeleteObject, [ebx-12]
-        invoke  DeleteObject, [ebx-8]
-        invoke  ReleaseDC,NULL, [ebx-4]
+        invoke  GetTickCount
+        sub     [ticks_send], eax
+        neg     [ticks_send]
+        
+        invoke  wvsprintf, buf_send, buf_format, ticks_send
+        
         
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
         
@@ -231,7 +153,81 @@ proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
         mov     [curScreen], start_screen
         mov     [close_flag], 0
         mov     [close_flag_buf], 0
+        
 .finish:
+    ret
+
+endp
+
+
+proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
+
+        mov     ebx, esp
+        
+        invoke  GetTickCount
+        mov     [ticks_output], eax
+         
+        
+        invoke  BitBlt, [hdcMemDC], 0, 0, 1920, 1080, [hdcScreen], 0, 0, SRCCOPY
+
+
+        invoke  SetThreadDpiAwarenessContext, -2
+        invoke  GetCursorPos, p
+        invoke  DrawIcon, [hdcMemDC], [p.x], [p.y], [wc.hCursor]
+        invoke  SetThreadDpiAwarenessContext, -1
+
+
+        invoke  GetTickCount
+        sub     [ticks_output], eax
+        neg     [ticks_output]
+        
+        invoke  wvsprintf, buf_output, buf_format, ticks_output
+
+
+        
+        invoke  GetTickCount
+        mov     [ticks_compress], eax
+        
+
+
+        invoke  GetDIBits, [hdcMemDC], [hbmScreen], 0, [bmpScreen.bmHeight], [lpbitmap], bi, 0
+        
+        
+        cmp     [minimized], 0
+        jnz     .skipDraw
+        
+        mov     eax, [bottom]
+        mov     [thread_rect_1+12], eax
+        mov     eax, [right]
+        mov     [thread_rect_1+8], eax
+        mov     eax, [top]
+        mov     [thread_rect_1+4], eax
+        mov     eax, [left]
+        mov     [thread_rect_1], eax
+        invoke  CreateThread, 0, 0, toScreen, thread_rect_1, 0, 0
+        mov     [thread_output], eax
+        
+.skipDraw:
+        
+        invoke WaitForSingleObject, [thread_send], 100000
+        
+        push    0    ;CompressedDataSize   -4
+
+        sub     ebx, 4
+        invoke  Compress, [Compressor], [lpbitmap], [bmfHeader.bfSize], [lpBuf], [dwBmpSize], ebx
+        add     ebx, 4
+        
+        invoke  GetTickCount
+        sub     [ticks_compress], eax
+        neg     [ticks_compress]
+        
+        push    ebx
+        invoke  wvsprintf, buf_compress, buf_format, ticks_compress
+        pop     ebx
+
+        invoke  CreateThread, 0, 0, send_tcp, [ebx-4], 0, 0
+        mov     [thread_send], eax
+
 
         mov     esp, ebx
         ret

@@ -8,12 +8,12 @@ if 2 * 2 = 5
   countInc=3
 [asm]
   asm1="test.ASM"
-  asm2="Client.asm"
-  asm3="Server.asm"
-  asm4="socket_consts.asm"
-  asm5="socket_funcs.asm"
-  asm6="socket_main.asm"
-  asm7="Screenshot.ASM"
+  asm2="Screenshot.ASM"
+  asm3="Client.asm"
+  asm4="Server.asm"
+  asm5="socket_consts.asm"
+  asm6="socket_funcs.asm"
+  asm7="socket_main.asm"
   asm8="Graph.ASM"
 [inc]
   inc1="help.inc"

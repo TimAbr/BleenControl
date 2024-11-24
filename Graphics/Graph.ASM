@@ -1,3 +1,17 @@
+proc drawFullScreenButton, right, bottom
+  mov       eax, [right]
+  sub       eax, 40
+  mov       ebx, [bottom]
+  sub       ebx, 10
+  mov       ecx, eax
+  add       ecx, 10
+  mov       edx, ebx 
+  stdcall  drawLine, eax, ebx, ecx, edx, 0 
+
+  ret
+endp
+
+
 proc    drawAddTemplate uses eax ebx ecx edx, show_str
 
     call    drawStart    

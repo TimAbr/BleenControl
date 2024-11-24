@@ -101,6 +101,11 @@ section '.text' code readable executable
                 ddsd,DDSBack,NULL
         test    eax, eax
         jnz     ddraw_error
+        
+        cominvk DDraw,CreateSurface,\
+                ddsd,DDSPicture,NULL
+        test    eax, eax
+        jnz     ddraw_error
 
         cominvk DDSBack,SetClipper,\
                 [DDClipper]
@@ -143,6 +148,63 @@ section '.text' code readable executable
 .skip:  
         stdcall Client.Destroy
         
+        invoke  GetDC, NULL
+        mov     [hdcScreen], eax 
+        
+        invoke  CreateCompatibleDC, [hdcScreen]
+        mov     [hdcMemDC],eax
+        
+        invoke  CreateCompatibleBitmap, [hdcScreen], 1920, 1080
+        mov     [hbmScreen],eax 
+        
+        invoke  SelectObject, [hdcMemDC], eax
+        
+        invoke  GetObject, [hbmScreen], sizeof.BITMAP, bmpScreen
+
+
+        mov     [bi.biSize], sizeof.BITMAPINFOHEADER
+        mov     eax, [bmpScreen.bmWidth]
+        mov     [bi.biWidth], eax
+        mov     eax, [bmpScreen.bmHeight]
+        mov     [bi.biHeight], eax
+        mov     [bi.biPlanes], 1
+        mov     [bi.biBitCount], 32
+        mov     [bi.biCompression], BI_RGB
+        mov     [bi.biSizeImage], 0
+        mov     [bi.biXPelsPerMeter], 0
+        mov     [bi.biYPelsPerMeter], 0
+        mov     [bi.biClrUsed], 0
+        mov     [bi.biClrImportant], 0
+
+        mov     eax, [bmpScreen.bmWidth]
+        shl     eax, 5
+        add     eax, 31
+        shr     eax, 3
+        mul     [bmpScreen.bmHeight]
+        mov     [dwBmpSize], eax 
+        
+        invoke  GlobalAlloc, GHND, [dwBmpSize]
+        mov     [hDIB], eax 
+
+        invoke  GlobalLock, eax
+        mov     [lpbitmap], eax  
+        
+        mov     eax, sizeof.BITMAPFILEHEADER
+        add     eax, sizeof.BITMAPINFOHEADER
+        add     [dwBmpSize], eax
+        mov     [bmfHeader.bfOffBits], eax
+        mov     eax, [dwBmpSize]
+        mov     [bmfHeader.bfSize], eax
+        mov     [bmfHeader.bfType], 0x4D42
+        
+        ;invoke  CreateMutexA, 0, TRUE, 0
+        
+        invoke  GlobalAlloc, GHND, [dwBmpSize]
+        mov     [hBuf], eax
+
+        invoke  GlobalLock, eax
+        mov     [lpBuf], eax
+                
 
 
   msg_loop:    ; цикл сообщений
@@ -151,10 +213,15 @@ section '.text' code readable executable
         invoke  GetMessage,msg,NULL,0,0
         cmp     eax,1
         jb      end_loop
-        jne     msg_loop
+        jne     wait_msg
         invoke  TranslateMessage,msg
         invoke  DispatchMessage,msg
         jmp     msg_loop
+        
+  wait_msg:
+        call    onPaint
+        jmp     msg_loop
+              
 
   ddraw_error:
 
@@ -197,6 +264,11 @@ section '.text' code readable executable
 ;функция отрисовки всех окон
 proc onPaint
 
+        invoke  IsIconic, [hwnd]
+        mov     [minimized], eax
+        test    eax, eax
+        jnz     .clientScreen
+
 .startScreen:
         cmp     [curScreen], start_screen
         jne     .serverScreen
@@ -223,7 +295,10 @@ proc onPaint
         
 ;двойная буферизация        
 .Skip:
-
+        
+        cmp     [minimized], 0
+        jnz     .finish
+        
         invoke  GetClientRect, [hwnd], rSrc
 
         invoke  GetWindowRect, [hwnd], rs
@@ -238,9 +313,10 @@ proc onPaint
         add     [rDest.top], ebx
         add     [rDest.right], eax
         add     [rDest.bottom], ebx
-
+        
         cominvk DDSMain, Blt, rDest, [DDSBack], rSrc, DDBLT_WAIT, NULL
 
+.finish:
         ret
 endp
 
@@ -254,9 +330,13 @@ endp
 
 
 proc  drawAddClient uses eax
+
+    cmp   [minimized], 0
+    jnz   .skipDraw
     mov   [server_input_num], num_cells
     stdcall    drawAddTemplate, client_id
     mov   [server_input_num], 0
+.skipDraw:
     invoke  GetTickCount
     sub   eax, [last_tick]
     cmp   eax, 1000
@@ -282,6 +362,9 @@ endp
 
 proc    drawMain uses edi
 
+        cmp     [minimized], 0
+        jnz      .skipDraw
+
         mov     [ddsd.dwSize],sizeof.DDSURFACEDESC
         mov     [ddsd.dwFlags],0
 
@@ -304,9 +387,7 @@ proc    drawMain uses edi
 
         stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], sec_color
 
-
-
-
+        
 
 
         mov         [backBtn.x], 10
@@ -317,7 +398,6 @@ proc    drawMain uses edi
         mov         [backBtn.right], eax
         add         ebx, 30
         mov         [backBtn.bottom], ebx
-        stdcall     drawBtn, backBtn
 
 
 
@@ -360,20 +440,92 @@ proc    drawMain uses edi
 
 .Skip:
 
-        stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], 0
+        ;stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], 0
 
         cominvk  DDSBack, Unlock, NULL
 
+.skipDraw:        
+        invoke  GetTickCount
+        mov     [ticks_total], eax     
+
         cmp   [mode], client_mode
         jne   .server
+        push    [lpBuf]
         stdcall GetScreenshot, [hwnd], [rs.left], [rs.top], [rs.right], [rs.bottom]
+        pop     [lpBuf]
         jmp   .finish
 .server:
         
         stdcall ShowImage, fileName, [rs.left], [rs.top], [rs.right], [rs.bottom]
+        ;stdcall drawFullScreenButton, [rs.right], [rs.bottom]
 .finish:
 
+        invoke  GetTickCount
+        sub     [ticks_total], eax
+        neg     [ticks_total]
+        
+        invoke  wvsprintf, buf_total, buf_format, ticks_total
+        
+        cmp     [minimized], 0
+        jnz      .skipDraw2
 
+
+
+        invoke  CreateFont, 10,\
+                            0,\
+                            0,\
+                            0,\
+                            FW_BOLD,\
+                            FALSE,\
+                            FALSE,\
+                            FALSE,\
+                            ANSI_CHARSET,\
+                            OUT_TT_PRECIS,\
+                            CLIP_DEFAULT_PRECIS,\
+                            PROOF_QUALITY,\
+                            DEFAULT_PITCH+ FF_DONTCARE,\
+                            _font_name
+
+        mov      [logoFont], eax
+
+
+        invoke  SelectObject, [hdc], [logoFont]
+        mov     [tempFont], eax
+
+        invoke   SetBkMode, [hdc], TRANSPARENT
+        invoke   SetTextColor, [hdc], 0xFFFFFF
+
+
+        cominvk  DDSBack, GetDC, hdc
+
+        mov      [rs.left], 10
+        mov      [rs.top], 10
+        mov      [rs.bottom], 50
+        mov      [rs.right],500
+        invoke   DrawText, [hdc], text_ticks_total, -1, rs, DT_CENTER+DT_VCENTER
+
+        mov      [rs.top], 50
+        mov      [rs.bottom], 90
+        invoke   DrawText, [hdc], text_ticks_compress, -1, rs, DT_CENTER+DT_VCENTER
+        
+        mov      [rs.top], 90
+        mov      [rs.bottom], 130
+        invoke   DrawText, [hdc], text_ticks_send, -1, rs, DT_CENTER+DT_VCENTER
+        
+        mov      [rs.top], 130
+        mov      [rs.bottom], 170
+        invoke   DrawText, [hdc], text_ticks_output, -1, rs, DT_CENTER+DT_VCENTER
+        
+        invoke  SelectObject, [hdc], [tempFont]
+        invoke  DeleteObject, [logoFont]
+
+
+        
+
+        stdcall     drawBtn, backBtn
+        
+        cominvk  DDSBack, ReleaseDC, [hdc]
+.skipDraw2:
         ret
 endp
 
@@ -629,6 +781,9 @@ endp
 ;обработка нажатия кнопок
 proc    checkButtons uses eax, lparam
 
+        cmp     [minimized], 0
+        jnz     finish
+
         movsx   eax, word [lparam]
         movsx   ebx, word [lparam+2]
 
@@ -755,8 +910,6 @@ clientScreen:
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], your_id, 16
         stdcall Client.Destroy                                 
 
-        jmp     finish
-
 
 finish:
         ret
@@ -823,6 +976,8 @@ section '.bss' readable writeable
   DDSBack DirectDrawSurface
   DDSPicture DirectDrawSurface
   DDClipper DirectDrawClipper
+  
+  hdcdd dd ?
 
   ps PAINTSTRUCT
   hdc dd ?
@@ -869,6 +1024,17 @@ section '.bss' readable writeable
   gdipsi      dd 20 dup (?)
   Compressor  dd ?
   Decompressor  dd ?
+  
+  hdcScreen dd ?
+  hdcMemDC dd ?
+  hbmScreen dd ?
+  dwBmpSize dd ?
+  hDIB dd ?
+  lpbitmap dd ?
+  dwSizeOfDIB dd ?
+  
+  
+  
 
 
 
@@ -880,7 +1046,8 @@ section '.idata' import data readable writeable
           gdi,'GDI32.DLL',\
           compress,'CABINET.DLL',\
           wsock32,  'WSOCK32.DLL',\
-          ws2tcpip, 'WS2_32.DLL'
+          ws2tcpip, 'WS2_32.DLL',\
+          stdlib, 'libc.lib'
           
 
   include 'api\kernel32.inc'
@@ -889,7 +1056,7 @@ section '.idata' import data readable writeable
 
   import ws2tcpip,\
          inet_ntop,'inet_ntop'
-         
+              
 
   import ddraw,\
          DirectDrawCreate,'DirectDrawCreate',\

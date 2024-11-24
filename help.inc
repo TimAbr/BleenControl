@@ -20,6 +20,7 @@ start_screen = 0
 main_screen = 1
 client_screen = 2 
 server_screen = 3 
+control_mode = 4
 
 include 'Network\Client.inc'
 include 'Network\Server.inc'
@@ -51,3 +52,56 @@ close_flag_buf  dd 0
 mode    dd -1
 server_mode = 0
 client_mode = 1
+
+dev_mode dd 0
+
+output_buf TCHAR 33 dup '0',0
+
+text_ticks_compress TCHAR "Compression ticks: "
+buf_compress TCHAR 33 dup '0',0
+ticks_compress dd 0
+
+text_ticks_total TCHAR "Total ticks: "
+buf_total TCHAR 33 dup '0',0
+ticks_total dd 0
+
+text_ticks_output TCHAR "Output ticks: "
+buf_output TCHAR 33 dup '0',0
+ticks_output dd 0
+
+text_ticks_send TCHAR "Network ticks: "
+buf_send TCHAR 33 dup '0',0
+ticks_send dd 0 
+
+
+
+thread_rect_1  dd 0, 0, 0, 0
+end_flag_1   dd 1
+
+
+thread_rect_2  dd 0, 0, 0, 0
+end_flag_2   dd 1
+
+
+thread_rect_3  dd 0, 0, 0, 0
+end_flag_3   dd 1
+
+
+thread_rect_4  dd 0, 0, 0, 0
+end_flag_4   dd 1
+
+thread_output dd 0
+thread_send dd 0
+thread_recieve dd 0
+thread_compress dd 0
+
+temp_recieve dd 0
+
+
+
+buf_format TCHAR "%lu",0
+
+hBuf  dd 0
+lpBuf dd 0
+
+minimized dd 0
