@@ -471,7 +471,7 @@ proc    drawMain uses edi
 
 
 
-        invoke  CreateFont, 10,\
+        invoke  CreateFont, 6,\
                             0,\
                             0,\
                             0,\
@@ -497,29 +497,49 @@ proc    drawMain uses edi
 
 
         cominvk  DDSBack, GetDC, hdc
+        
+        cmp       [dev_mode], 0
+        je        .skipDev
 
         mov      [rs.left], 10
         mov      [rs.top], 10
-        mov      [rs.bottom], 50
+        mov      [rs.bottom], 30
         mov      [rs.right],500
-        invoke   DrawText, [hdc], text_ticks_total, -1, rs, DT_CENTER+DT_VCENTER
+        invoke   DrawText, [hdc], text_ticks_total, -1, rs, DT_LEFT+DT_VCENTER
 
+        mov      [rs.top], 30
+        mov      [rs.bottom], 50
+        invoke   DrawText, [hdc], text_ticks_compress, -1, rs, DT_LEFT+DT_VCENTER
+        
         mov      [rs.top], 50
+        mov      [rs.bottom], 70
+        invoke   DrawText, [hdc], text_ticks_send, -1, rs, DT_LEFT+DT_VCENTER
+        
+        mov      [rs.top], 70
         mov      [rs.bottom], 90
-        invoke   DrawText, [hdc], text_ticks_compress, -1, rs, DT_CENTER+DT_VCENTER
+        invoke   DrawText, [hdc], text_ticks_output, -1, rs, DT_LEFT+DT_VCENTER
         
         mov      [rs.top], 90
-        mov      [rs.bottom], 130
-        invoke   DrawText, [hdc], text_ticks_send, -1, rs, DT_CENTER+DT_VCENTER
+        mov      [rs.bottom], 110
+        invoke   DrawText, [hdc], text_x_pos, -1, rs, DT_LEFT+DT_VCENTER
         
+        mov      [rs.top], 110
+        mov      [rs.bottom], 130
+        invoke   DrawText, [hdc], text_y_pos, -1, rs, DT_LEFT+DT_VCENTER 
+        
+        mov     eax, text_lbtn_down
+        cmp     [MouseDown], 1
+        je      .SkipLbtnState
+        mov     eax, text_lbtn_up
+.SkipLbtnState:
         mov      [rs.top], 130
-        mov      [rs.bottom], 170
-        invoke   DrawText, [hdc], text_ticks_output, -1, rs, DT_CENTER+DT_VCENTER
+        mov      [rs.bottom], 150
+        invoke   DrawText, [hdc], eax, -1, rs, DT_LEFT+DT_VCENTER 
         
         invoke  SelectObject, [hdc], [tempFont]
         invoke  DeleteObject, [logoFont]
 
-
+.skipDev:
         
 
         stdcall     drawBtn, backBtn
@@ -641,7 +661,10 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         je      .wmcreate
 
         cmp     eax,WM_LBUTTONDOWN
-        je      .wmlbtn
+        je      .wmlbtndown
+        
+        cmp     eax,WM_LBUTTONUP
+        je      .wmlbtnup
 
         cmp     eax,WM_KEYDOWN
         je      .wmkeydown
@@ -674,13 +697,16 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         xor     eax,eax
         jmp     .finish
 
-  .wmlbtn:
+  .wmlbtndown: 
+        mov     [MouseDown], 1
         mov     eax, [lparam]
         mov     [p], eax
         stdcall checkButtons, [lparam]
         jmp     .finish
 
-
+   .wmlbtnup:
+        mov     [MouseDown], 0
+        jmp     .finish
 
 
   .wmkeydown:

@@ -4,19 +4,10 @@ include "test.ASM"
 
 if 2 * 2 = 5
 [options]
-  countAsm=8
-  countInc=3
+  countAsm=1
+  countInc=1
 [asm]
   asm1="test.ASM"
-  asm2="Screenshot.ASM"
-  asm3="Client.asm"
-  asm4="Server.asm"
-  asm5="socket_consts.asm"
-  asm6="socket_funcs.asm"
-  asm7="socket_main.asm"
-  asm8="Graph.ASM"
 [inc]
   inc1="help.inc"
-  inc2="Client.inc"
-  inc3="Server.inc"
 end if

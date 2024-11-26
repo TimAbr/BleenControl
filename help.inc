@@ -53,7 +53,7 @@ mode    dd -1
 server_mode = 0
 client_mode = 1
 
-dev_mode dd 0
+dev_mode dd 1
 
 output_buf TCHAR 33 dup '0',0
 
@@ -72,6 +72,15 @@ ticks_output dd 0
 text_ticks_send TCHAR "Network ticks: "
 buf_send TCHAR 33 dup '0',0
 ticks_send dd 0 
+
+text_x_pos TCHAR "Mouse x-position: "
+buf_x_pos TCHAR 10 dup '0',0
+
+text_y_pos TCHAR "Mouse y-position: "
+buf_y_pos TCHAR 10 dup '0',0
+
+text_lbtn_down TCHAR "Down",0
+text_lbtn_up TCHAR "Up",0
 
 
 
@@ -94,6 +103,7 @@ thread_output dd 0
 thread_send dd 0
 thread_recieve dd 0
 thread_compress dd 0
+thread_control dd 0
 
 temp_recieve dd 0
 
@@ -105,3 +115,11 @@ hBuf  dd 0
 lpBuf dd 0
 
 minimized dd 0
+
+MousePos dd 0, 0
+MouseDown dd 0
+
+res1080 = 1
+res720 = 2
+res480 = 3
+res360 = 4

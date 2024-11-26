@@ -27,6 +27,64 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], bi, sizeof.BITMAPINFOHEADER
         
+        mov     [temp1], 0
+        invoke  GetCursorPos, p  
+
+        
+        invoke  GetWindowRect, [hwnd], rs
+        mov     eax, [rs.left]
+        add     eax, 8
+        mov     ebx, [rs.top]
+        add     ebx, 31
+        sub     [p.x], eax
+        sub     [p.y], ebx      
+       
+        mov     eax, [p.y]
+        sub     eax, [top]
+        jl      .skipMouse
+        
+        mov     ebx, [bottom]
+        cmp     ebx, eax
+        jl      .skipMouse
+        
+        mov     eax, [p.x]
+        sub     eax, [left]
+        jl      .skipMouse
+        mov     ecx, 1920
+        xor     edx, edx
+        
+        mov     ebx, [right]
+        cmp     ebx, eax
+        jl      .skipMouse
+        
+        mul     ecx
+       
+        
+        xor     edx, edx
+        div     ebx
+        
+        mov     [MousePos], eax
+        
+        mov     eax, [p.y]
+        sub     eax, [top]
+        xor     edx, edx
+        mov     ecx, 1080
+        mul     ecx
+        mov     ebx, [bottom]
+        xor     edx, edx
+        div     ebx
+        
+        mov     [MousePos+4], eax
+        
+        mov     eax, [MouseDown]
+        mov     [temp1], eax
+        
+.skipMouse:                
+        
+        
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], MousePos, 8
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
+        
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], close_flag_buf, 4
         
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
@@ -101,11 +159,11 @@ proc send_tcp uses eax ebx ecx edx, size
 
         mov     eax, [size]
         mov     [temp1], eax
-        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
-
         
         invoke  GetTickCount
         mov     [ticks_send], eax
+        
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
         
         mov     [temp1], 0
         
@@ -130,23 +188,36 @@ proc send_tcp uses eax ebx ecx edx, size
         
 
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], bi, sizeof.BITMAPINFOHEADER
-
-
-        invoke  GetTickCount
-        sub     [ticks_send], eax
-        neg     [ticks_send]
         
-        invoke  wvsprintf, buf_send, buf_format, ticks_send
+        invoke  wvsprintf, buf_send, buf_format, ticks_send    
         
+        
+        invoke WaitForSingleObject, [thread_control], 100000                        
+        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], MousePos, 8
+        
+        invoke  wvsprintf, buf_x_pos, buf_format, MousePos
+        invoke  wvsprintf, buf_y_pos, buf_format, MousePos+4
+        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4
+        
+        invoke  CreateThread, 0, 0, control, 0, 0, 0
+        mov     [thread_control], eax
         
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
         
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], close_flag_buf, 4
         
+        invoke  GetTickCount
+        sub     [ticks_send], eax
+        neg     [ticks_send]
+        
         mov      eax, [close_flag_buf]
         add      eax, [close_flag]
         cmp     eax, 0
         je      .finish
+        
+        invoke  WaitForMultipleObjects, 5, thread_output, TRUE, 10000
         
         stdcall Server.Destroy
         
@@ -157,6 +228,45 @@ proc send_tcp uses eax ebx ecx edx, size
 .finish:
     ret
 
+endp   
+
+
+
+proc control uses eax ebx ecx edx
+        push    [MousePos]
+        push    [MousePos+4]
+        
+        mov     eax, 65535
+        xor     edx, edx
+        mul     [MousePos]
+        xor     edx, edx
+        mov     ecx, 1920
+        div     ecx
+        mov     [MousePos], eax
+        
+        mov     eax, 65535
+        xor     edx, edx
+        mul     [MousePos+4]
+        xor     edx, edx
+        mov     ecx, 1080
+        div     ecx
+        mov     [MousePos+4], eax
+        
+        mov     eax, [temp]
+        cmp     eax, [MouseDown]
+        je      .skipMouseState
+        mov     [MouseDown], eax
+        cmp     [MouseDown], 0
+        je      .up
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_LEFTDOWN, dword[MousePos], dword[MousePos+4],0,0
+        jmp     .skipMouseState
+.up:    
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_LEFTUP, dword[MousePos], dword[MousePos+4],0,0   
+.skipMouseState:      
+        ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, dword[MousePos], dword[MousePos+4],0,0
+        pop     [MousePos+4]
+        pop     [MousePos]
+   ret
 endp
 
 
