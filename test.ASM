@@ -126,6 +126,10 @@ section '.text' code readable executable
         invoke  CreateCompressor, 4, NULL, Compressor
         invoke  CreateDecompressor, 4, NULL, Decompressor
         
+        ;создание компрессора для сжатия изображений
+        invoke  CreateCompressor, 2, NULL, Compressor1
+        invoke  CreateDecompressor, 2, NULL, Decompressor1
+        
         ;инициализация уникального id клиента
         stdcall Client.Init, Client.YourIP, [Client.YourPort]
         
@@ -153,8 +157,9 @@ section '.text' code readable executable
         
         invoke  CreateCompatibleDC, [hdcScreen]
         mov     [hdcMemDC],eax
+        invoke  SetStretchBltMode, eax, HALFTONE
         
-        invoke  CreateCompatibleBitmap, [hdcScreen], 1920, 1080
+        invoke  CreateCompatibleBitmap, [hdcScreen], [image_width], [image_height]
         mov     [hbmScreen],eax 
         
         invoke  SelectObject, [hdcMemDC], eax
@@ -189,14 +194,21 @@ section '.text' code readable executable
         invoke  GlobalLock, eax
         mov     [lpbitmap], eax  
         
+        invoke  GlobalAlloc, GHND, [dwBmpSize]
+        mov     [hTempBuf], eax 
+
+        invoke  GlobalLock, eax
+        mov     [lpTempBuf], eax  
+                
+        
         mov     eax, sizeof.BITMAPFILEHEADER
         add     eax, sizeof.BITMAPINFOHEADER
         add     [dwBmpSize], eax
         mov     [bmfHeader.bfOffBits], eax
         mov     eax, [dwBmpSize]
         mov     [bmfHeader.bfSize], eax
-        mov     [bmfHeader.bfType], 0x4D42
-        
+        mov     [bmfHeader.bfType], 0x4D42  
+                   
         ;invoke  CreateMutexA, 0, TRUE, 0
         
         invoke  GlobalAlloc, GHND, [dwBmpSize]
@@ -204,6 +216,9 @@ section '.text' code readable executable
 
         invoke  GlobalLock, eax
         mov     [lpBuf], eax
+        
+        mov     [cur_res], 1
+        stdcall  recreateBMP
                 
 
 
@@ -295,6 +310,8 @@ proc onPaint
         
 ;двойная буферизация        
 .Skip:
+        
+        ;invoke WaitForSingleObject, [thread_output], 100000
         
         cmp     [minimized], 0
         jnz     .finish
@@ -417,13 +434,13 @@ proc    drawMain uses edi
         push    eax
         invoke  GetClientRect, [hwnd], rDest
         pop     eax
-        add     eax, 20
+        add     eax, 60
         cmp     eax, [rDest.bottom]
         jbe     .Skip
 
         mov     eax, [rDest.bottom]
-        sub     eax, 20
-        mov     [rs.top], 10
+        sub     eax, 60
+        mov     [rs.top], 30
         mov     [rs.bottom], eax
         xor     edx, edx
         push    9
@@ -438,7 +455,51 @@ proc    drawMain uses edi
         sub     [rs.right], ebx
 
 
+
 .Skip:
+
+        mov     eax, [rs.left]
+        add     eax, [rs.right]
+        mov     [res1080Btn.right],eax
+        sub     eax, 45
+        mov     [res1080Btn.x],eax
+        mov     eax, [rs.top]
+        add     eax, [rs.bottom]
+        add     eax, 6
+        mov     [res1080Btn.y],eax 
+        add     eax, 18
+        mov     [res1080Btn.bottom],eax
+        
+        
+        mov     eax, [res1080Btn.x]
+        sub     eax, 10
+        mov     [res720Btn.right],eax
+        sub     eax, 45
+        mov     [res720Btn.x],eax
+        mov     eax, [res1080Btn.y]
+        mov     [res720Btn.y],eax 
+        add     eax, 18
+        mov     [res720Btn.bottom],eax
+        
+        mov     eax, [res720Btn.x]
+        sub     eax, 10
+        mov     [res480Btn.right],eax
+        sub     eax, 45
+        mov     [res480Btn.x],eax
+        mov     eax, [res720Btn.y]
+        mov     [res480Btn.y],eax 
+        add     eax, 18
+        mov     [res480Btn.bottom],eax
+        
+        mov     eax, [res480Btn.x]
+        sub     eax, 10
+        mov     [res360Btn.right],eax
+        sub     eax, 45
+        mov     [res360Btn.x],eax
+        mov     eax, [res480Btn.y]
+        mov     [res360Btn.y],eax 
+        add     eax, 18
+        mov     [res360Btn.bottom],eax
 
         ;stdcall    drawRect, [rs.left], [rs.top], [rs.right], [rs.bottom], 0
 
@@ -543,6 +604,10 @@ proc    drawMain uses edi
         
 
         stdcall     drawBtn, backBtn
+        stdcall     drawBtn, res1080Btn
+        stdcall     drawBtn, res720Btn
+        stdcall     drawBtn, res480Btn
+        stdcall     drawBtn, res360Btn
         
         cominvk  DDSBack, ReleaseDC, [hdc]
 .skipDraw2:
@@ -683,6 +748,12 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         
         cmp     eax,WM_CHAR
         je      .wmchar
+        
+        cmp     eax,WM_SETFOCUS
+        je      .wmsetfocus
+        
+        cmp     eax,WM_KILLFOCUS
+        je      .wmkillfocus
 
   .defwndproc:
         invoke  DefWindowProc,[hwnd],[wmsg],[wparam],[lparam]
@@ -690,6 +761,14 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
 
   .wmcreate:
         xor     eax,eax
+        jmp     .finish
+        
+  .wmsetfocus:
+        mov     [window_active], 1
+        jmp     .finish
+        
+  .wmkillfocus:
+        mov     [window_active], 0
         jmp     .finish
 
   .wmdestroy:
@@ -770,6 +849,8 @@ proc    inputID, wparam
     stdcall Client.Init, ip_addr, [Server.YourPort]
     
     mov    [mode], server_mode
+    
+    
     
     jmp   .finish
 .error_ip:
@@ -874,18 +955,106 @@ mainScreen:
 
 .backBtn:
         cmp     eax, [backBtn.x]
-        jb      finish
+        jb      .res360Btn
         cmp     ebx, [backBtn.y]
-        jb      finish
+        jb      .res360Btn
         cmp     eax, [backBtn.right]
-        ja      finish
+        ja      .res360Btn
         cmp     ebx, [backBtn.bottom]
-        ja      finish
+        ja      .res360Btn
 
         mov     [close_flag], 1
         call    onPaint
         mov     [curScreen], start_screen
         
+
+        jmp     finish
+        
+.res360Btn:
+        cmp     eax, [res360Btn.x]
+        jb      .res480Btn
+        cmp     ebx, [res360Btn.y]
+        jb      .res480Btn
+        cmp     eax, [res360Btn.right]
+        ja      .res480Btn
+        cmp     ebx, [res360Btn.bottom]
+        ja      .res480Btn
+
+        cmp     [cur_res], res360
+        je      finish
+        
+        mov     [change_flag], 1 
+        mov     [cur_res], res360
+        
+        cmp     [mode], server_mode
+        je      finish
+        stdcall recreateBMP        
+
+        jmp     finish
+        
+.res480Btn:
+        cmp     eax, [res480Btn.x]
+        jb      .res720Btn
+        cmp     ebx, [res480Btn.y]
+        jb      .res720Btn
+        cmp     eax, [res480Btn.right]
+        ja      .res720Btn
+        cmp     ebx, [res480Btn.bottom]
+        ja      .res720Btn
+
+        cmp     [cur_res], res480
+        je      finish
+        
+        mov     [change_flag], 1
+        mov     [cur_res], res480
+        
+        cmp     [mode], server_mode
+        je      finish
+        stdcall recreateBMP        
+
+        jmp     finish
+        
+.res720Btn:
+        cmp     eax, [res720Btn.x]
+        jb      .res1080Btn
+        cmp     ebx, [res720Btn.y]
+        jb      .res1080Btn
+        cmp     eax, [res720Btn.right]
+        ja      .res1080Btn
+        cmp     ebx, [res720Btn.bottom]
+        ja      .res1080Btn
+
+        cmp     [cur_res], res720
+        je      finish
+        
+        mov     [change_flag], 1
+        mov     [cur_res], res720
+        
+        cmp     [mode], server_mode
+        je      finish
+        stdcall recreateBMP        
+
+        jmp     finish
+        
+.res1080Btn:
+        cmp     eax, [res1080Btn.x]
+        jb      finish
+        cmp     ebx, [res1080Btn.y]
+        jb      finish
+        cmp     eax, [res1080Btn.right]
+        ja      finish
+        cmp     ebx, [res1080Btn.bottom]
+        ja      finish
+
+        cmp     [cur_res], res1080
+        je      finish
+        
+        mov     [change_flag], 1
+        mov     [cur_res], res1080
+        
+        cmp     [mode], server_mode
+        je      finish
+        stdcall recreateBMP        
 
         jmp     finish
 
@@ -970,6 +1139,11 @@ section '.data' data readable writeable
   host_name db 256 dup (?)
   ip_addr   db 32 dup (0)
   
+  res360text  TCHAR '360p', 0
+  res480text  TCHAR '480p', 0
+  res720text  TCHAR '720p', 0
+  res1080text  TCHAR '1080p', 0
+  
   
 
 
@@ -1005,7 +1179,6 @@ section '.bss' readable writeable
   
   hdcdd dd ?
 
-  ps PAINTSTRUCT
   hdc dd ?
   hbr dd ?
   
@@ -1030,9 +1203,13 @@ section '.bss' readable writeable
   pen           dd ?
   brush         dd ?
 
-  serverBtn BUTTON 0, 0, 0, 0, serverBtnText, 0xFFFFFF, main_color
-  clientBtn BUTTON 0, 0, 0, 0, clientBtnText, 0xFFFFFF, main_color
-  backBtn  BUTTON 0, 0, 0, 0, backBtnText, 0xFFFFFF, main_color
+  serverBtn BUTTON 0, 0, 0, 0, serverBtnText, main_color, 0xFFFFFF, 18
+  clientBtn BUTTON 0, 0, 0, 0, clientBtnText, main_color, 0xFFFFFF, 18
+  backBtn  BUTTON 0, 0, 0, 0, backBtnText, main_color, 0xFFFFFF, 18
+  res360Btn BUTTON 0, 0, 0, 0, res360text, menu_color, 0xFFFFFF, 14
+  res480Btn  BUTTON 0, 0, 0, 0, res480text, menu_color, 0xFFFFFF, 14
+  res720Btn  BUTTON 0, 0, 0, 0, res720text, menu_color, 0xFFFFFF, 14
+  res1080Btn  BUTTON 0, 0, 0, 0, res1080text, main_color, 0xFFFFFF, 14
 
   bmpScreen BITMAP
   bmfHeader BITMAPFILEHEADER
@@ -1044,12 +1221,12 @@ section '.bss' readable writeable
   pBmpDest   dd ?
   hFile      dd ?
 
-  picture  TCHAR 'FRAME.JPEG', 0
-
-  gdiPlusToken dd ?
-  gdipsi      dd 20 dup (?)
   Compressor  dd ?
   Decompressor  dd ?
+  Compressor1  dd ?
+  Decompressor1  dd ?
+  hTempBuf dd 0
+  lpTempBuf dd 0
   
   hdcScreen dd ?
   hdcMemDC dd ?
@@ -1110,12 +1287,6 @@ section '.idata' import data readable writeable
          CreateCompatibleBitmap,'CreateCompatibleBitmap',\
          GetDIBits, 'GetDIBits',\
          SetDIBits, 'SetDIBits'
-
-  import gdiplus,\
-         GdiplusStartup, 'GdiplusStartup',\
-         Bitmap, 'GdipCreateBitmapFromHBITMAP',\
-         SaveImage, 'GdipSaveImageToFile',\
-         GdipLoadImageFromFile, 'GdipLoadImageFromFile'
 
   import compress,\
          CreateCompressor, 'CreateCompressor',\

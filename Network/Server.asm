@@ -1,4 +1,3 @@
-
 proc Server.Init uses edx ecx ebx
 
   stdcall ws_soket_init 

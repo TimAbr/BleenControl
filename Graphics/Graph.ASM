@@ -194,9 +194,11 @@ proc    drawBtn uses edi eax ebx, button
             tb     dd   ?
             p      dd   ?
             tp     dd   ?
-        endl
+        endl  
+        
+        mov     ebx, [button]
 
-        invoke  CreateFont, 18,\
+        invoke  CreateFont, dword [ebx+28],\
                             0,\
                             0,\
                             0,\
@@ -225,7 +227,7 @@ proc    drawBtn uses edi eax ebx, button
         invoke  SelectObject, [hdc], eax
         mov     [tp], eax
 
-        invoke  CreateSolidBrush, [ebx+24]
+        invoke  CreateSolidBrush, [ebx+20]
         mov     [b], eax
         
         invoke  SelectObject, [hdc], eax
@@ -249,7 +251,7 @@ proc    drawBtn uses edi eax ebx, button
         mov      [rSrc.bottom], eax
 
         invoke   SetBkMode, [hdc], TRANSPARENT
-        invoke   SetTextColor, [hdc],[ebx+20]
+        invoke   SetTextColor, [hdc],[ebx+24]
 
         invoke   DrawText, [hdc], [ebx+16], -1, rSrc, DT_CALCRECT+DT_CENTER
        

@@ -7,6 +7,7 @@ struct BUTTON
 	text	dd ?
 	color	dd ?
 	textColor dd ?
+  textSize dd ?
 
 ends
 
@@ -123,3 +124,14 @@ res1080 = 1
 res720 = 2
 res480 = 3
 res360 = 4
+
+cur_res dd 1
+temp_res dd 1
+change_flag dd 0
+temp_flag dd 0
+
+image_width dd 1920
+image_height dd 1080
+
+cursor_size dd 32
+window_active dd 1
