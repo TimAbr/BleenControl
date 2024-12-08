@@ -203,7 +203,8 @@ section '.text' code readable executable
         shl     eax, 5
         ;mul     [bi.biBitCount]
         add     eax, 31
-        shr     eax, 3
+        shr     eax, 5
+        shl     eax, 2
         mul     [bmpScreen.bmHeight]
         mov     [dwBmpSize], eax 
         

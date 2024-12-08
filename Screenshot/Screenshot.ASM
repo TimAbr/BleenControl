@@ -401,7 +401,7 @@ proc control uses eax ebx ecx edx
 endp
 
 
-proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
+proc    GetScreenshot uses eax ebx edx , hwnd, left, top, right, bottom
 
         mov     ebx, esp
         
@@ -475,7 +475,8 @@ proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
         invoke  GetDIBits, [hdcMemDC], [hbmScreen], 0, [bmpScreen.bmHeight], [lpbitmap], bi, 0
         
         
-        
+        push    esi
+        push    edi
         
         cmp     [change_flag], 0
         jne     .SkipDirtyRect
@@ -515,8 +516,8 @@ proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
         mov     [max_x], eax
 .skipmaxx:
 
-        ;mov     eax, 1080
-        ;sub     eax, ecx 
+        mov     eax, [bi.biHeight]
+        sub     eax, ecx 
         mov     eax, ecx  
         cmp     eax, [min_y]
         ja      .skipminy
@@ -556,6 +557,8 @@ proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
         invoke  wvsprintf, buf_max_x, buf_format, max_x
         invoke  wvsprintf, buf_max_y, buf_format, max_y
         
+        pop    edi
+        pop    esi
         
         
         mov     eax, [max_x]
@@ -587,11 +590,21 @@ proc    GetScreenshot uses eax ebx edx, hwnd, left, top, right, bottom
         invoke  GetDIBits, [hdcMemDC_res], [hbmScreen_res], 0, [bi_res.biHeight], [lpbitmap_res], bi_res, 0
         
         mov     eax, [bi_res.biWidth]
-        shl     eax, 5
-        add     eax, 31
-        shr     eax, 3
+        shl     eax, 2
+        ;shl     eax, 5
+        ;add     eax, 31
+        ;mov     ecx, 31
+        ;not     ecx
+        ;and     eax, ecx
+        ;shr     eax, 3
         mul     [bi_res.biHeight]
         mov     [bi_res.biSizeImage], eax
+        ;mov     eax, sizeof.BITMAPFILEHEADER
+        ;add     eax, sizeof.BITMAPINFOHEADER
+        ;add     [bi_res.biSizeImage], eax
+        ;mov     eax, [bi_res.biSizeImage]
+        ;mov     [temp], eax
+        ;mov     [bi_res.biSizeImage], 0
         
         
         
