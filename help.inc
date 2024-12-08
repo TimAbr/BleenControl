@@ -83,6 +83,18 @@ buf_y_pos TCHAR 10 dup '0',0
 text_lbtn_down TCHAR "Down",0
 text_lbtn_up TCHAR "Up",0
 
+text_img_size TCHAR "Image size (compressed): "
+buf_img_size TCHAR 10 dup '0',0
+
+text_min_x TCHAR "Min X: "
+buf_min_x TCHAR 10 dup '0',0
+text_min_y TCHAR "Min Y: "
+buf_min_y TCHAR 10 dup '0',0
+text_max_x TCHAR "Max X: "
+buf_max_x TCHAR 10 dup '0',0
+text_max_y TCHAR "Max Y: "
+buf_max_y TCHAR 10 dup '0',0
+
 
 
 thread_rect_1  dd 0, 0, 0, 0
@@ -105,9 +117,15 @@ thread_send dd 0
 thread_recieve dd 0
 thread_compress dd 0
 thread_control dd 0
+thread_drawInterface dd 0
+thread_movemouse dd 0
+
+mut_min dd 0
+mut_name TCHAR "mut_min",0
 
 temp_recieve dd 0
 
+mouse_last dd 0
 
 
 buf_format TCHAR "%lu",0
@@ -135,3 +153,12 @@ image_height dd 1080
 
 cursor_size dd 32
 window_active dd 1
+
+show_efficiency dd 0
+control_mouse dd 0
+control_keyboard dd 0
+
+max_x dd 0
+max_y dd 0
+min_x dd 0
+min_y dd 0

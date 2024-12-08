@@ -51,6 +51,24 @@ section '.text' code readable executable
         test    eax,eax
         jz      startup_error
         mov     [hwnd], eax
+        
+        
+        ;invoke  CreateWindowEx, 0,\
+        ;                        _button_class,\ ; имя класса
+        ;                        _button_text,\  ; заголовок окна
+        ;                        WS_TABSTOP+WS_VISIBLE+WS_CHILD+BS_CHECKBOX,\  ;стиль окна
+        ;                        40,\  ; х окна
+        ;                        40,\  ; у окна
+        ;                        200,\  ; ширина окна
+        ;                        200,\  ; высота окна
+        ;                        [hwnd],\ ; указатель родительского окна
+        ;                        1,\ ; дескриптор меню (меню нет - null)
+        ;                        [wc.hInstance],\ ; дескриптор приложения
+        ;                        NULL   ; данные, которые могут быть переданы при создании окна
+        ;                               ; null - не передаются
+        ;mov   [hCheckBoxDev], eax
+        
+        ;invoke  CheckDlgButton, [hwnd], 1, BST_CHECKED
 
         invoke  DirectDrawCreate,NULL,DDraw,NULL  ; создание интерфейса DirectDraw
         test    eax,eax
@@ -126,10 +144,6 @@ section '.text' code readable executable
         invoke  CreateCompressor, 4, NULL, Compressor
         invoke  CreateDecompressor, 4, NULL, Decompressor
         
-        ;создание компрессора для сжатия изображений
-        invoke  CreateCompressor, 2, NULL, Compressor1
-        invoke  CreateDecompressor, 2, NULL, Decompressor1
-        
         ;инициализация уникального id клиента
         stdcall Client.Init, Client.YourIP, [Client.YourPort]
         
@@ -159,6 +173,10 @@ section '.text' code readable executable
         mov     [hdcMemDC],eax
         invoke  SetStretchBltMode, eax, HALFTONE
         
+        
+        invoke  CreateCompatibleDC, [hdcMemDC]
+        mov     [hdcMemDC_res],eax
+        
         invoke  CreateCompatibleBitmap, [hdcScreen], [image_width], [image_height]
         mov     [hbmScreen],eax 
         
@@ -183,6 +201,7 @@ section '.text' code readable executable
 
         mov     eax, [bmpScreen.bmWidth]
         shl     eax, 5
+        ;mul     [bi.biBitCount]
         add     eax, 31
         shr     eax, 3
         mul     [bmpScreen.bmHeight]
@@ -194,13 +213,6 @@ section '.text' code readable executable
         invoke  GlobalLock, eax
         mov     [lpbitmap], eax  
         
-        invoke  GlobalAlloc, GHND, [dwBmpSize]
-        mov     [hTempBuf], eax 
-
-        invoke  GlobalLock, eax
-        mov     [lpTempBuf], eax  
-                
-        
         mov     eax, sizeof.BITMAPFILEHEADER
         add     eax, sizeof.BITMAPINFOHEADER
         add     [dwBmpSize], eax
@@ -209,13 +221,47 @@ section '.text' code readable executable
         mov     [bmfHeader.bfSize], eax
         mov     [bmfHeader.bfType], 0x4D42  
                    
-        ;invoke  CreateMutexA, 0, TRUE, 0
         
         invoke  GlobalAlloc, GHND, [dwBmpSize]
         mov     [hBuf], eax
 
         invoke  GlobalLock, eax
         mov     [lpBuf], eax
+        
+        
+        
+        
+        mov     [bi_res.biSize], sizeof.BITMAPINFOHEADER
+        mov     eax, [bmpScreen.bmWidth]
+        mov     [bi_res.biWidth], eax
+        mov     eax, [bmpScreen.bmHeight]
+        mov     [bi_res.biHeight], eax
+        mov     [bi_res.biPlanes], 1
+        mov     [bi_res.biBitCount], 32
+        mov     [bi_res.biCompression], BI_RGB
+        mov     [bi_res.biSizeImage], 0
+        mov     [bi_res.biXPelsPerMeter], 0
+        mov     [bi_res.biYPelsPerMeter], 0
+        mov     [bi_res.biClrUsed], 0
+        mov     [bi_res.biClrImportant], 0
+        
+        invoke  GlobalAlloc, GHND, [dwBmpSize]
+        mov     [hDIB_temp], eax 
+
+        invoke  GlobalLock, eax
+        mov     [lpbitmap_temp], eax 
+        
+        
+        
+        
+        
+        
+        invoke  GlobalAlloc, GHND, [dwBmpSize]
+        mov     [hDIB_res], eax 
+
+        invoke  GlobalLock, eax
+        mov     [lpbitmap_res], eax 
+
         
         mov     [cur_res], 1
         stdcall  recreateBMP
@@ -254,6 +300,11 @@ section '.text' code readable executable
   
         mov     [close_flag], 1
         call    onPaint
+        
+        
+        
+        
+        invoke WaitForSingleObject, [thread_drawInterface], 1000000
 
         cmp     [DDSBack],0
         je      back_surface_released
@@ -277,16 +328,22 @@ section '.text' code readable executable
 
 
 ;функция отрисовки всех окон
-proc onPaint
+proc onPaint 
 
+        invoke WaitForSingleObject, [thread_drawInterface], 0
+        cmp   eax, WAIT_TIMEOUT
+        je    .finish
+          
         invoke  IsIconic, [hwnd]
         mov     [minimized], eax
-        test    eax, eax
+        test     eax, eax
         jnz     .clientScreen
+
 
 .startScreen:
         cmp     [curScreen], start_screen
         jne     .serverScreen
+        ;mov     [close_flag_buf], 0
         call    drawStart
         jmp     .Skip
         
@@ -305,16 +362,20 @@ proc onPaint
 .mainScreen:
         cmp     [curScreen], main_screen
         jne     .Skip
-        call    drawMain
+        invoke  CreateThread, 0, 0, drawMain, 0, 0, 0
+        mov     [thread_drawInterface], eax
+        ;call    drawMain
         jmp     .Skip
         
 ;двойная буферизация        
 .Skip:
-        
-        ;invoke WaitForSingleObject, [thread_output], 100000
-        
-        cmp     [minimized], 0
+
+        cmp    [minimized], 0
         jnz     .finish
+
+        
+        ;cmp     [close_flag_buf], 0
+        ;ja      onPaint
         
         invoke  GetClientRect, [hwnd], rSrc
 
@@ -331,8 +392,7 @@ proc onPaint
         add     [rDest.right], eax
         add     [rDest.bottom], ebx
         
-        cominvk DDSMain, Blt, rDest, [DDSBack], rSrc, DDBLT_WAIT, NULL
-
+        cominvk DDSMain, Blt, rDest, [DDSBack], rSrc, DDBLT_WAIT, NULL 
 .finish:
         ret
 endp
@@ -348,8 +408,9 @@ endp
 
 proc  drawAddClient uses eax
 
-    cmp   [minimized], 0
-    jnz   .skipDraw
+    cmp    [minimized], 0
+    jnz     .skipDraw
+    
     mov   [server_input_num], num_cells
     stdcall    drawAddTemplate, client_id
     mov   [server_input_num], 0
@@ -369,6 +430,8 @@ proc  drawAddClient uses eax
     je  .finish
     stdcall Server.Init
     mov    [mode], client_mode
+    
+    
     mov  [curScreen], main_screen
 .finish:
     ret
@@ -379,8 +442,8 @@ endp
 
 proc    drawMain uses edi
 
-        cmp     [minimized], 0
-        jnz      .skipDraw
+        cmp    [minimized], 0
+        jnz     .skipDraw
 
         mov     [ddsd.dwSize],sizeof.DDSURFACEDESC
         mov     [ddsd.dwFlags],0
@@ -527,12 +590,12 @@ proc    drawMain uses edi
         
         invoke  wvsprintf, buf_total, buf_format, ticks_total
         
-        cmp     [minimized], 0
-        jnz      .skipDraw2
 
+        cmp    [minimized], 0
+        jnz     .skipDraw2
+        
 
-
-        invoke  CreateFont, 6,\
+        invoke  CreateFont, 2,\
                             0,\
                             0,\
                             0,\
@@ -561,41 +624,62 @@ proc    drawMain uses edi
         
         cmp       [dev_mode], 0
         je        .skipDev
-
-        mov      [rs.left], 10
-        mov      [rs.top], 10
-        mov      [rs.bottom], 30
-        mov      [rs.right],500
-        invoke   DrawText, [hdc], text_ticks_total, -1, rs, DT_LEFT+DT_VCENTER
-
-        mov      [rs.top], 30
-        mov      [rs.bottom], 50
-        invoke   DrawText, [hdc], text_ticks_compress, -1, rs, DT_LEFT+DT_VCENTER
         
-        mov      [rs.top], 50
+        invoke  GetClientRect, [hwnd], rs
+
+        mov       eax, [rs.right]
+        sub       eax, 500
+        mov      [rs.left], eax
+        mov      [rs.top], 10
+        mov      [rs.bottom], 25
+        sub      [rs.right],10
+        invoke   DrawText, [hdc], text_ticks_total, -1, rs, DT_RIGHT+DT_VCENTER
+
+        mov      [rs.top], 25
+        mov      [rs.bottom], 40
+        invoke   DrawText, [hdc], text_ticks_compress, -1, rs, DT_RIGHT+DT_VCENTER
+        
+        mov      [rs.top], 40
+        mov      [rs.bottom], 55
+        invoke   DrawText, [hdc], text_ticks_send, -1, rs, DT_RIGHT+DT_VCENTER
+        
+        mov      [rs.top], 55
         mov      [rs.bottom], 70
-        invoke   DrawText, [hdc], text_ticks_send, -1, rs, DT_LEFT+DT_VCENTER
+        invoke   DrawText, [hdc], text_ticks_output, -1, rs, DT_RIGHT+DT_VCENTER
         
         mov      [rs.top], 70
-        mov      [rs.bottom], 90
-        invoke   DrawText, [hdc], text_ticks_output, -1, rs, DT_LEFT+DT_VCENTER
+        mov      [rs.bottom], 85
+        invoke   DrawText, [hdc], text_x_pos, -1, rs, DT_RIGHT+DT_VCENTER
         
-        mov      [rs.top], 90
-        mov      [rs.bottom], 110
-        invoke   DrawText, [hdc], text_x_pos, -1, rs, DT_LEFT+DT_VCENTER
-        
-        mov      [rs.top], 110
-        mov      [rs.bottom], 130
-        invoke   DrawText, [hdc], text_y_pos, -1, rs, DT_LEFT+DT_VCENTER 
+        mov      [rs.top], 85
+        mov      [rs.bottom], 100
+        invoke   DrawText, [hdc], text_y_pos, -1, rs, DT_RIGHT+DT_VCENTER 
         
         mov     eax, text_lbtn_down
         cmp     [MouseDown], 1
         je      .SkipLbtnState
         mov     eax, text_lbtn_up
 .SkipLbtnState:
+        mov      [rs.top], 100
+        mov      [rs.bottom], 115
+        invoke   DrawText, [hdc], eax, -1, rs, DT_RIGHT+DT_VCENTER 
+        
+        mov      [rs.top], 115
+        mov      [rs.bottom], 130
+        invoke   DrawText, [hdc], text_img_size, -1, rs, DT_RIGHT+DT_VCENTER
+         
         mov      [rs.top], 130
-        mov      [rs.bottom], 150
-        invoke   DrawText, [hdc], eax, -1, rs, DT_LEFT+DT_VCENTER 
+        mov      [rs.bottom], 145
+        invoke   DrawText, [hdc], text_min_x, -1, rs, DT_RIGHT+DT_VCENTER
+        mov      [rs.top], 145
+        mov      [rs.bottom], 160
+        invoke   DrawText, [hdc], text_min_y, -1, rs, DT_RIGHT+DT_VCENTER
+        mov      [rs.top], 160
+        mov      [rs.bottom], 175
+        invoke   DrawText, [hdc], text_max_x, -1, rs, DT_RIGHT+DT_VCENTER
+        mov      [rs.top], 175
+        mov      [rs.bottom], 190
+        invoke   DrawText, [hdc], text_max_y, -1, rs, DT_RIGHT+DT_VCENTER
         
         invoke  SelectObject, [hdc], [tempFont]
         invoke  DeleteObject, [logoFont]
@@ -760,7 +844,7 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         jmp     .finish
 
   .wmcreate:
-        xor     eax,eax
+               
         jmp     .finish
         
   .wmsetfocus:
@@ -772,11 +856,15 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         jmp     .finish
 
   .wmdestroy:
+        invoke WaitForSingleObject, [thread_drawInterface], 1000000
+        invoke WaitForSingleObject, [thread_recieve], 1000000
         invoke  PostQuitMessage,0
         xor     eax,eax
         jmp     .finish
 
-  .wmlbtndown: 
+  .wmlbtndown:
+        invoke WaitForSingleObject, [thread_drawInterface], 1000000 
+        invoke WaitForSingleObject, [thread_recieve], 1000000
         mov     [MouseDown], 1
         mov     eax, [lparam]
         mov     [p], eax
@@ -784,6 +872,8 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         jmp     .finish
 
    .wmlbtnup:
+        invoke WaitForSingleObject, [thread_drawInterface], 1000000
+        invoke WaitForSingleObject, [thread_recieve], 1000000
         mov     [MouseDown], 0
         jmp     .finish
 
@@ -799,8 +889,6 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         stdcall     inputID,[wparam]
         jmp     .finish 
         
-
-
 
   .wmpaint:
         call    onPaint
@@ -845,6 +933,7 @@ proc    inputID, wparam
     cmp   [ip_addr], 0
     jz    .error_ip
     
+    
     mov   [curScreen], main_screen
     stdcall Client.Init, ip_addr, [Server.YourPort]
     
@@ -888,7 +977,7 @@ endp
 ;обработка нажатия кнопок
 proc    checkButtons uses eax, lparam
 
-        cmp     [minimized], 0
+        cmp    [minimized], 0
         jnz     finish
 
         movsx   eax, word [lparam]
@@ -983,6 +1072,8 @@ mainScreen:
         cmp     [cur_res], res360
         je      finish
         
+        invoke WaitForSingleObject, [thread_drawInterface], 100000
+        
         mov     [change_flag], 1 
         mov     [cur_res], res360
         
@@ -1004,6 +1095,8 @@ mainScreen:
 
         cmp     [cur_res], res480
         je      finish
+        
+        invoke WaitForSingleObject, [thread_drawInterface], 100000
         
         mov     [change_flag], 1
         mov     [cur_res], res480
@@ -1027,6 +1120,8 @@ mainScreen:
         cmp     [cur_res], res720
         je      finish
         
+        invoke WaitForSingleObject, [thread_drawInterface], 100000
+        
         mov     [change_flag], 1
         mov     [cur_res], res720
         
@@ -1048,6 +1143,8 @@ mainScreen:
 
         cmp     [cur_res], res1080
         je      finish
+        
+        invoke WaitForSingleObject, [thread_drawInterface], 100000
         
         mov     [change_flag], 1
         mov     [cur_res], res1080
@@ -1116,6 +1213,8 @@ endp
 section '.data' data readable writeable
 
   _class TCHAR 'FDDRAW32',0
+  _button_class TCHAR 'BUTTON',0
+  _button_text TCHAR 'OK',0
   _title TCHAR 'Welcome to BleenControl',0
 
   _error TCHAR 'Startup failed.',0
@@ -1144,6 +1243,10 @@ section '.data' data readable writeable
   res720text  TCHAR '720p', 0
   res1080text  TCHAR '1080p', 0
   
+  effBtnText TCHAR 'Show efficiency', 0
+  off_text TCHAR 'Off', 0
+  on_text TCHAR 'On', 0
+  
   
 
 
@@ -1152,6 +1255,7 @@ section '.bss' readable writeable
   server_input_num  dd  0
   
   hwnd dd  ?
+  hCheckBoxDev dd ?
 
   wc WNDCLASS 0,\ ; стиль окна по умолчанию             ; структура, определяющая класс окна
               WindowProc,\ ; функция окна
@@ -1210,6 +1314,8 @@ section '.bss' readable writeable
   res480Btn  BUTTON 0, 0, 0, 0, res480text, menu_color, 0xFFFFFF, 14
   res720Btn  BUTTON 0, 0, 0, 0, res720text, menu_color, 0xFFFFFF, 14
   res1080Btn  BUTTON 0, 0, 0, 0, res1080text, main_color, 0xFFFFFF, 14
+  effBtn  BUTTON 0, 0, 0, 0, effBtnText, menu_color, 0xFFFFFF, 18
+  
 
   bmpScreen BITMAP
   bmfHeader BITMAPFILEHEADER
@@ -1220,6 +1326,12 @@ section '.bss' readable writeable
   hbmDest    dd ?
   pBmpDest   dd ?
   hFile      dd ?
+  
+  bi_res     BITMAPINFOHEADER
+  hDIB_res dd ?
+  lpbitmap_res dd ?
+  hbmScreen_res dd ?
+  hdcMemDC_res dd ?
 
   Compressor  dd ?
   Decompressor  dd ?
@@ -1234,6 +1346,8 @@ section '.bss' readable writeable
   dwBmpSize dd ?
   hDIB dd ?
   lpbitmap dd ?
+  hDIB_temp dd ?
+  lpbitmap_temp dd ?
   dwSizeOfDIB dd ?
   
   

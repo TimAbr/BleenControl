@@ -542,3 +542,168 @@ EndProc:
 
         ret
 endp
+
+proc drawLine_mouse uses edi eax ebx ecx edx esi, x1, y1, x2, y2
+
+        push    edi
+
+        mov     eax, [y1]
+        cmp     eax, [y2]
+        jle     .Skip
+        xchg    eax, [y2]
+        xchg    [y1], eax
+        mov     eax, [x1]
+        xchg    eax, [x2]
+        xchg    [x1], eax
+.Skip:
+
+        mov     eax, [y1]
+        mul     [sWidth]
+        add     edi, eax
+        shl     [x1], 2
+        add     edi, [x1]
+        shr     [x1], 2
+
+        mov     ecx, [y2]
+        sub     ecx, [y1]   ;delta y (A)
+
+        mov     ebx, [x1]
+        sub     ebx, [x2]   ;delta x (B)
+
+        mov     eax, ecx
+        cdq
+        or      edx, 1
+        mov     esi, edx      ;sign A
+        mul     esi
+        mov     ecx, eax
+
+        mov     eax, ebx
+        cdq
+        or      edx, 1
+        mov     ebx, edx      ;sign B
+        mul     ebx
+        mov     dx, si
+        shl     dx, 8
+        mov     dl, bl
+        shl     dl, 2
+        mov     ebx, eax
+
+        pop     esi
+        push    edx
+        mov     eax, [y2]
+        mul     [sWidth]
+        add     esi, eax
+        shl     [x2], 2
+        add     esi, [x2]
+
+        mov     [x2], esi
+        xor     esi, esi
+
+        ;dl - sign B - x1
+        ;dh - sign A
+        ;ebx - B
+        ;ecx - A
+        ;edi - coords
+        ;x2 - end coords
+        ;esi - f
+        ;eax - color
+
+.StartDraw:
+        pop     edx
+        movsx   eax, dl
+        mov     [x1], eax
+        
+        push    edx
+        mov     eax, edi
+        xor     edx, edx
+        ;shr     [sWidth], 2
+        div     [sWidth]
+        mov     [p.y], eax
+        shr     edx, 2
+        mov     [p.x], edx
+        ;shl     [sWidth], 2
+        pop     edx
+
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y],0,0
+
+
+.Compare:      ;B-A
+
+
+        cmp    ebx, ecx
+        jg     Above45
+
+
+Below45:           ;B<A
+.StartLoop:
+
+        add     esi, ebx
+
+        cmp     esi, 0
+        jle     .Skip
+
+        sub     esi, ecx
+        sub     edi, [x1]
+
+.Skip:
+        cmp     dh, 0
+        js      .CheckSign
+        add     edi, [sWidth]
+        jmp     .Draw
+.CheckSign:
+        sub     edi, [sWidth]
+
+.Draw:
+
+        push    edx
+        mov     eax, edi
+        xor     edx, edx
+        ;shr     [sWidth], 2
+        div     [sWidth]
+        mov     [p.y], eax
+        shr     edx, 2
+        mov     [p.x], edx
+        ;shl     [sWidth], 2
+        pop     edx
+
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y] ,0,0
+
+        cmp     edi, [x2]
+        jb      .StartLoop
+
+
+        jmp     EndProc
+
+
+
+Above45:
+.StartLoop:
+
+        add     esi, ecx
+
+        cmp     esi, 0
+        jle     .Skip
+
+        sub     esi, ebx
+
+        cmp     dh, 0
+        js      .CheckSign
+        add     edi, [sWidth]
+        jmp     .Skip
+.CheckSign:
+        sub     edi, [sWidth]
+
+.Skip:
+
+        sub     edi, [x1]
+
+.Draw:
+        mov     [edi], eax
+
+        cmp     edi, [x2]
+        jb      .StartLoop
+
+EndProc:
+
+        ret
+endp
