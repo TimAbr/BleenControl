@@ -91,15 +91,58 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         
         mov     [MousePos+4], eax
         
-        mov     eax, [MouseDown]
+        mov     eax, [MouseTotal]
         mov     [temp1], eax
         
 .skipMouse:                
         
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], window_active, 4
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], MousePos, 8
+        
+        cmp    [window_active], 0
+        je      .clearmouselist
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
         
+        cmp    [temp1], 0
+        je      .clearmouselist
+         
+        mov   ebx, [MouseHead.NextP]
+        mov   ecx, [temp1]
+.mouseloop:
+        push   ecx
+        mov     eax, [ebx]
+        mov     [temp1], eax
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
+        mov   eax, [ebx+4]
+        mov   ebx, eax  
+        pop    ecx      
+        loop  .mouseloop
+        
+.clearmouselist:
+        mov   ecx, [MouseTotal]
+        test  ecx, ecx
+        jz    .SkipMouseList
+.clearloop:  
+        push  ecx      
+        mov   ebx, [MouseHead.NextP]
+        push  dword[ebx+4]
+        push  dword[ebx+8]
+        invoke GlobalUnlock, [MouseHead.NextH]
+        invoke GlobalFree, [MouseHead.NextH]
+        pop   eax
+        mov   [MouseHead.NextH], eax
+        pop   eax
+        mov   [MouseHead.NextP], eax
+        pop   ecx
+        loop  .clearloop
+        
+        mov   [MouseTotal], 0
+        mov   [MouseCur], MouseHead
+.SkipMouseList:        
+        cmp    [window_active], 0
+        je      .skipSymbol
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], InputSymbol, 4
+.skipSymbol:        
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], close_flag_buf, 4
         
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
@@ -264,7 +307,7 @@ proc send_tcp uses eax ebx ecx edx, size
         invoke  wvsprintf, buf_send, buf_format, ticks_send    
         
         
-        invoke WaitForSingleObject, [thread_control], 100000                        
+        ;invoke WaitForSingleObject, [thread_control], 100000                        
         
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], window_active, 4
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], MousePos, 8
@@ -272,13 +315,14 @@ proc send_tcp uses eax ebx ecx edx, size
         invoke  wvsprintf, buf_x_pos, buf_format, MousePos
         invoke  wvsprintf, buf_y_pos, buf_format, MousePos+4
         
-        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4
         
         cmp     [window_active], 0
-        je      .skipControl
-        invoke  CreateThread, 0, 0, control, 0, 0, 0
-        mov     [thread_control], eax
-.skipControl:        
+        je      .skipControlMouse
+        stdcall control
+
+.skipControlMouse: 
+        
+       
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
         
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], close_flag_buf, 4
@@ -354,6 +398,8 @@ endp
 
 
 proc control uses eax ebx ecx edx
+
+
         push    [MousePos]
         push    [MousePos+4]
         
@@ -373,30 +419,46 @@ proc control uses eax ebx ecx edx
         div     ecx
         mov     [MousePos+4], eax
         
-        invoke  GetTickCount
-        mov     ebx, eax
-        sub     eax, [mouse_last]
-        shr     eax, 2
-        mov     [mouse_last], ebx
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp1, 4
         
         ;invoke  CreateThread, 0, 0, movemouse, 0, 0, 0
         ;mov     [thread_movemouse], eax
         
         ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, dword[MousePos], dword[MousePos+4],0,0
+        mov     ecx, [temp1]
+        test    ecx, ecx
+        jz      skipMouseCycle
+.mouseloop:
+        push    ecx        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4
         
         mov     eax, [temp]
         cmp     eax, [MouseDown]
         je      .skipMouseState
         mov     [MouseDown], eax
-        cmp     [MouseDown], 0
+        test    eax, eax
         je      .up
         ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_LEFTDOWN, dword[MousePos], dword[MousePos+4],0,0
         jmp     .skipMouseState
 .up:    
         ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_LEFTUP, dword[MousePos], dword[MousePos+4],0,0   
-.skipMouseState:      
+.skipMouseState: 
+        pop     ecx
+        loop    .mouseloop
+skipMouseCycle:
+             
         pop     [MousePos+4]
         pop     [MousePos]
+        
+        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], InputSymbol, 4
+        
+        cmp     [InputSymbol], 0
+        je      .finish
+        ;invoke   keybd_event, dword[InputSymbol], 0, 0, 0
+        ;invoke   keybd_event, dword[InputSymbol], 0, 2, 0
+        
+.finish:
    ret
 endp
 
@@ -647,8 +709,9 @@ proc    GetScreenshot uses eax ebx edx , hwnd, left, top, right, bottom
         invoke  wvsprintf, buf_compress, buf_format, ticks_compress
         pop     ebx
 
-        invoke  CreateThread, 0, 0, send_tcp, [ebx-4], 0, 0
-        mov     [thread_send], eax
+        stdcall  send_tcp, [ebx-4]
+        ;invoke  CreateThread, 0, 0, send_tcp, [ebx-4], 0, 0
+        ;mov     [thread_send], eax
         
         invoke  DeleteObject, [hbmScreen_res]
 

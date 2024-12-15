@@ -11,17 +11,52 @@ struct BUTTON
 
 ends
 
+
+struct MouseListElement
+
+	Down	dd ?
+	NextP dd ?
+  NextH dd ?
+
+ends
+
+MouseHead MouseListElement 0,0,0
+MouseCur dd MouseHead
+
+MouseTotal dd 0
+
+struct KeyboardListElement
+
+	Down	dd ?
+  Char  dd ?
+	NextP dd ?
+  NextH dd ?
+
+ends
+
+KeyboardHead KeyboardListElement 0,0,0,0
+CurKeyboard dd KeyboardHead
+
+KeyboardTotal dd 0
+
 num_cells = 4
 cells_gap = 25
 add_template_width = 400
 add_template_half_width = 200
 add_template_border = 15
 
+num_cells_ip = 12
+cells_gap_ip = 5
+add_template_width_ip = 700
+add_template_half_width_ip = 350
+add_template_border_ip = 15
+
 start_screen = 0
 main_screen = 1
 client_screen = 2 
 server_screen = 3 
 control_mode = 4
+change_ip_screen = 5
 
 include 'Network\Client.inc'
 include 'Network\Server.inc'
@@ -137,6 +172,7 @@ minimized dd 0
 
 MousePos dd 0, 0
 MouseDown dd 0
+InputSymbol dd 0
 
 res1080 = 1
 res720 = 2

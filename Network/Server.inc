@@ -1,4 +1,4 @@
-;Server.YourIP    db '127.0.0.1', 0
+;Server.YourIP    db '127.000.000.001', 0
 Server.YourIP    db '192.168.1.11', 0
 Server.YourPort  dd 1111
 Server.YourP2PPort  dd 1111

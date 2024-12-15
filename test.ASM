@@ -143,27 +143,7 @@ section '.text' code readable executable
         ;создание компрессора для сжатия изображений
         invoke  CreateCompressor, 4, NULL, Compressor
         invoke  CreateDecompressor, 4, NULL, Decompressor
-        
-        ;инициализация уникального id клиента
-        stdcall Client.Init, Client.YourIP, [Client.YourPort]
-        
-        invoke  CreateFile, fileSettings, GENERIC_READ+GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL
-        mov    [hfileSettings], eax
-        invoke  GetLastError
-        cmp     eax, 183
-        je      .exists
-.getID:
-        ;получение id от сервера
-        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], Request.getId, 4        
-        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], your_id, 16
-        mov [temp], 0
-        invoke  WriteFile, [hfileSettings], your_id, 16, temp, NULL
-        jmp .skip
-.exists:
-        ;чтение id из файла настроек
-        invoke   ReadFile, [hfileSettings], your_id, 16, 0, NULL
-        
-.skip:  
+         
         stdcall Client.Destroy
         
         invoke  GetDC, NULL
@@ -265,7 +245,7 @@ section '.text' code readable executable
 
         
         mov     [cur_res], 1
-        stdcall  recreateBMP
+        stdcall  recreateBMP 
                 
 
 
@@ -356,8 +336,14 @@ proc onPaint
 
 .clientScreen:
         cmp     [curScreen], client_screen
-        jne     .mainScreen
+        jne     .changeIpScreen
         call    drawAddClient
+        jmp     .Skip
+        
+.changeIpScreen:
+        cmp     [curScreen], change_ip_screen
+        jne     .mainScreen
+        call    drawChangeIp
         jmp     .Skip
         
 .mainScreen:
@@ -397,6 +383,217 @@ proc onPaint
 .finish:
         ret
 endp
+
+
+
+
+proc  drawChangeIp uses eax ebx
+    call    drawStart    
+    
+    cominvk  DDSBack, GetDC, hdc
+
+    
+    invoke  CreatePen, PS_NULL, 1, 0
+    mov     [pen], eax
+    
+    invoke  SelectObject, [hdc], eax
+    mov     [tempPen], eax
+
+    invoke  CreateSolidBrush, menu_color
+    mov     [brush], eax
+
+    invoke  SelectObject, [hdc],eax; [brush]
+    mov     [tempBrush], eax    
+
+    invoke  GetClientRect, [hwnd], rs
+    add     [rs.top], 30
+    sub     [rs.bottom], 30
+    mov     eax, [rs.right]
+    sub     eax, [rs.left]
+    shr     eax, 1
+    sub     eax, add_template_half_width_ip
+    mov     [rs.left], eax
+    add     eax, add_template_width_ip
+    mov     [rs.right], eax
+    
+    
+    invoke   RoundRect, [hdc], [rs.left], [rs.top], [rs.right], [rs.bottom], 15, 15
+    
+   
+    mov     eax, [rs.left]
+    add     eax, add_template_border_ip  
+    mov     [backBtn.x], eax
+    mov     ebx, [rs.bottom]
+    sub     ebx, 30 + add_template_border_ip
+    mov     [backBtn.y], ebx
+    add     eax, 120
+    mov     [backBtn.right], eax
+    add     ebx, 30
+    mov     [backBtn.bottom], ebx
+   
+    
+    mov     eax, cells_gap_ip
+    mov     ebx, num_cells_ip
+    dec     ebx
+    mul     ebx
+    neg     eax
+    add     eax, add_template_width_ip
+    sub     eax, add_template_border_ip
+    sub     eax, add_template_border_ip
+    mov     ebx, num_cells_ip
+    xor     edx, edx
+    div     ebx
+    
+    push    eax
+    
+    invoke  GetClientRect, [hwnd], rs
+    add     [rs.top], 60+40
+    
+    pop     eax
+    push    eax
+    
+    mov     ebx, 10
+    mul     ebx
+    shr     eax, 3
+    mov     ebx, [rs.top]
+    add     ebx, eax
+    mov     [rs.bottom], ebx
+    mov     ebx, 3
+    xor     edx, edx
+    div     ebx 
+    
+    
+    invoke  CreateFont, eax,\
+                            0,\
+                            0,\
+                            0,\
+                            FW_DONTCARE,\
+                            FALSE,\
+                            FALSE,\
+                            FALSE,\
+                            ANSI_CHARSET,\
+                            OUT_TT_PRECIS,\
+                            CLIP_DEFAULT_PRECIS,\
+                            PROOF_QUALITY,\
+                            DEFAULT_PITCH+ FF_DONTCARE,\
+                            _font_name
+
+    mov     [mainFont], eax
+    invoke  SelectObject, [hdc], eax
+    mov     [tempFont], eax
+    invoke   SetBkMode, [hdc], TRANSPARENT
+    invoke   SetTextColor, [hdc],0xffffff
+    
+    
+    mov     eax, [rs.right]
+    sub     eax, [rs.left]
+    shr     eax, 1
+    sub     eax, add_template_half_width_ip
+    add     eax, add_template_border_ip
+    mov     [rs.left], eax
+    pop     ebx
+    add     eax, ebx
+    mov     [rs.right], eax
+    add     ebx, cells_gap_ip
+    
+    push    ebx
+    sub   [rs.top], 40
+    invoke   DrawText, [hdc], change_server_text, -1, rs, DT_NOCLIP+DT_TOP+DT_LEFT+DT_SINGLELINE
+    add   [rs.top], 40
+    invoke  SelectObject, [hdc], [tempBrush]
+    invoke   DeleteObject, [brush]
+    
+    invoke  CreateSolidBrush, main_color
+    mov     [brush], eax
+
+    invoke  SelectObject, [hdc],eax
+    mov     [tempBrush], eax
+    
+    pop     eax
+    
+    mov ecx, num_cells_ip
+    mov ebx, input_ip
+    
+    mov edx, 3
+.drawCells:
+    push  eax
+    push  ecx
+    push  ebx
+    push  ecx
+    push  edx
+    
+
+   
+    invoke   RoundRect, [hdc], [rs.left], [rs.top], [rs.right], [rs.bottom], 15, 15
+    pop   edx
+    pop   ecx
+    dec   edx
+    jnz   .SkipDot
+    
+    cmp   ecx, 1
+    jz    .SkipDot
+    push   [rs.left]
+    push   [rs.top]
+    push   [rs.right]
+    push   [rs.bottom]
+    mov    eax, [rs.bottom]
+    sub    eax, 4
+    mov    [rs.top], eax
+    add    eax, 8
+    mov    [rs.bottom], eax
+    
+    mov    eax, [rs.right]
+    sub    eax, 2
+    mov    [rs.left], eax
+    add    eax, 8
+    mov    [rs.right], eax
+    push   edx
+    invoke   Ellipse, [hdc], [rs.left], [rs.top], [rs.right], [rs.bottom]
+    pop    edx
+    pop   [rs.bottom]
+    pop   [rs.right]
+    pop   [rs.top]
+    pop   [rs.left] 
+    mov   edx, 3
+.SkipDot: 
+   
+    pop   ebx
+    pop   ecx
+    
+    push  ecx
+    push  edx
+    mov   eax, num_cells_ip+1
+    sub   eax, ecx
+    cmp   eax, [server_input_num] 
+    jg  .Skip 
+    invoke   DrawText, [hdc], ebx, -1, rs, DT_NOCLIP+DT_CENTER+DT_VCENTER+DT_SINGLELINE
+.Skip:    
+    add   ebx, 4
+    pop   edx
+    pop   ecx
+    pop   eax
+    
+    add   [rs.left], eax
+    add   [rs.right], eax
+
+    dec   ecx
+    jnz   .drawCells  
+    
+    stdcall drawBtn, backBtn 
+     
+    invoke  SelectObject, [hdc], [tempFont]
+    invoke   DeleteObject, [mainFont]
+    
+    invoke  SelectObject, [hdc], [tempBrush]
+    invoke   DeleteObject, [brush]
+
+    invoke  SelectObject, [hdc], [tempPen]
+    invoke   DeleteObject, [pen]
+    
+    cominvk  DDSBack, ReleaseDC, [hdc]
+    ret
+endp
+
 
 
 
@@ -720,9 +917,20 @@ proc    drawStart uses edi
         stdcall    drawRect, 0, 0, [rs.right], [rs.bottom], main_color
 
         push    [rs.right]
-        push    [rs.bottom]
+        push    [rs.bottom]   
+        
+        sub     [rs.bottom], 35
+        
+        
+        mov         [settingsBtn.x], 10
+        mov         eax, [rs.bottom]
+        mov         [settingsBtn.y], eax
+        add         eax, 25
+        mov         [settingsBtn.bottom], eax
+        mov         [settingsBtn.right], 80
+        
 
-        sub     [rs.bottom], 150
+        sub     [rs.bottom], 120
         sub     [rs.right], 200
 
 
@@ -749,6 +957,8 @@ proc    drawStart uses edi
         sub         ebx, 60
         mov         [clientBtn.y], ebx
         stdcall     drawBtn, clientBtn
+        
+        stdcall     drawBtn, settingsBtn
 
         cominvk  DDSBack, Unlock, NULL
 
@@ -839,6 +1049,9 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         
         cmp     eax,WM_KILLFOCUS
         je      .wmkillfocus
+        
+        cmp     eax,WM_KEYUP
+        je      .wmkeyup
 
   .defwndproc:
         invoke  DefWindowProc,[hwnd],[wmsg],[wparam],[lparam]
@@ -846,7 +1059,7 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
 
   .wmcreate:
                
-        jmp     .finish
+        jmp     .finish  
         
   .wmsetfocus:
         mov     [window_active], 1
@@ -863,31 +1076,79 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         xor     eax,eax
         jmp     .finish
 
-  .wmlbtndown:
-        invoke WaitForSingleObject, [thread_drawInterface], 1000000 
-        invoke WaitForSingleObject, [thread_recieve], 1000000
+  .wmlbtndown: 
+        cmp     [mode], server_mode
+        jne     .CheckButtons
+        
+        ;invoke WaitForSingleObject, [thread_drawInterface], 1000000 
+        ;invoke WaitForSingleObject, [thread_recieve], 1000000
         mov     [MouseDown], 1
+        
+        inc     [MouseTotal]
+        mov     ebx, [MouseCur]
+        invoke  GlobalAlloc, GHND, sizeof.MouseListElement
+        mov     [ebx+8], eax
+        invoke  GlobalLock, eax
+        mov     [ebx+4], eax
+        mov     [MouseCur], eax
+        mov     ebx, eax
+        mov     dword[ebx+4], 0
+        mov     dword[ebx+8], 0
+        mov     dword[ebx], 1
+        
+        
+.CheckButtons:        
         mov     eax, [lparam]
         mov     [p], eax
         stdcall checkButtons, [lparam]
         jmp     .finish
 
-   .wmlbtnup:
-        invoke WaitForSingleObject, [thread_drawInterface], 1000000
-        invoke WaitForSingleObject, [thread_recieve], 1000000
+   .wmlbtnup: 
+        cmp     [mode], server_mode
+        jne     .finish
+        ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
+        ;invoke WaitForSingleObject, [thread_recieve], 1000000
         mov     [MouseDown], 0
+        
+        inc     [MouseTotal]
+        mov     ebx, [MouseCur]
+        invoke  GlobalAlloc, GHND, sizeof.MouseListElement
+        mov     [ebx+8], eax
+        invoke  GlobalLock, eax
+        mov     [ebx+4], eax
+        mov     [MouseCur], eax
+        mov     ebx, eax
+        mov     dword[ebx+4], 0
+        mov     dword[ebx+8], 0
+        mov     dword[ebx], 0
+        
+        jmp     .finish
+        
+   .wmkeyup:
+        mov     [InputSymbol], 0
         jmp     .finish
 
 
   .wmkeydown:
         cmp     [wparam],VK_ESCAPE
+        je     .wmdestroy
+        
+        cmp     [curScreen], change_ip_screen
         jne     .finish
-        jmp     .wmdestroy
+        invoke WaitForSingleObject, [thread_drawInterface], 1000000
+        invoke WaitForSingleObject, [thread_recieve], 1000000
+        mov     eax, [wparam]
+        mov     [InputSymbol], eax
+        jmp     .finish
   
   .wmchar:
         cmp     [curScreen], server_screen
-        jne     .finish
+        jne     .change_ip
         stdcall     inputID,[wparam]
+ .change_ip:
+        cmp     [curScreen], change_ip_screen
+        jne     .finish
+        stdcall     changeIP,[wparam]
         jmp     .finish 
         
 
@@ -940,7 +1201,7 @@ proc    inputID, wparam
     
     mov    [mode], server_mode
     
-    
+    mov   [server_input_num], 0
     
     jmp   .finish
 .error_ip:
@@ -975,6 +1236,91 @@ proc    inputID, wparam
 endp
 
 
+
+
+
+
+
+;обработка нажатий клавиш при вводе id
+proc    changeIP, wparam
+
+.enter_button:
+    cmp   [wparam], 0x0D
+    jne   .backspace
+    
+    cmp   [server_input_num], num_cells_ip
+    jne   .finish
+    
+    mov   ecx, 4
+    mov   esi, Client.YourIP
+    mov   edx, 0
+.outerloop:
+    mov   edi, 3
+    mov   ebx, 0
+.innerloop:
+    mov   ax,[input_ip+edx] 
+    cmp   al, '0'
+    jne   .Skip
+    cmp   ebx, 0
+    jne   .Skip
+    cmp   edi, 1
+    je    .Skip
+    add   edx, 4
+    dec   edi
+    jmp   .innerloop
+    
+.Skip:    
+    mov   [esi], al
+    mov   ebx, 1
+    
+    add   edx, 4
+    add   esi, 1
+    dec   edi
+    jnz   .innerloop
+    
+    jl    .innerloop
+    add   esi, 1
+    loop  .outerloop 
+    
+    mov   [curScreen], start_screen 
+    mov   [server_input_num], 0  
+  
+    jmp   .finish
+.backspace:
+    cmp   [wparam], 0x08
+    jne   .other
+    
+    mov   eax, [server_input_num]
+    test  eax, eax
+    jz    .finish
+    dec   [server_input_num]
+    
+    jmp   .finish
+.other:
+
+    cmp   [wparam],'0'
+    jb    .finish
+    cmp   [wparam], '9'
+    ja    .finish 
+    mov   eax, [server_input_num]
+    cmp   eax, num_cells_ip
+    je    .finish
+    shl   eax, 2
+    inc   [server_input_num]
+    mov   bx, word[wparam] 
+    mov   word[input_ip+eax], bx
+    
+.finish:   
+    ret
+endp
+
+
+
+
+
+
+
+
 ;обработка нажатия кнопок
 proc    checkButtons uses eax, lparam
 
@@ -989,7 +1335,7 @@ proc    checkButtons uses eax, lparam
 
 startScreen:
         cmp     [curScreen], start_screen
-        jne     mainScreen
+        jne     settingsScreen
 
 .serverBtn:
         cmp     eax, [serverBtn.x]
@@ -1010,16 +1356,39 @@ startScreen:
 
 .clientBtn:
         cmp     eax, [clientBtn.x]
-        jb      finish
+        jb      .settingsBtn
         cmp     ebx, [clientBtn.y]
-        jb      finish
+        jb      .settingsBtn
         cmp     eax, [clientBtn.right]
-        ja      finish
+        ja      .settingsBtn
         cmp     ebx, [clientBtn.bottom]
-        ja      finish
+        ja      .settingsBtn
 
 
         mov     [curScreen], client_screen
+
+                ;инициализация уникального id клиента
+        stdcall Client.Init, Client.YourIP, [Client.YourPort]
+        
+        invoke  CreateFile, fileSettings, GENERIC_READ+GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL
+        mov    [hfileSettings], eax
+        invoke  GetLastError
+        cmp     eax, 183
+        je      .exists
+.getID:
+        ;получение id от сервера
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], Request.getId, 4        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], your_id, 16
+        mov [temp], 0
+        invoke  WriteFile, [hfileSettings], your_id, 16, temp, NULL
+        jmp .skip
+.exists:
+        ;чтение id из файла настроек
+        invoke   ReadFile, [hfileSettings], your_id, 16, 0, NULL       
+.skip: 
+        invoke   CloseHandle, [hfileSettings]
+        stdcall Client.Destroy
+        
         
         mov     ecx, 4
         mov     ebx, 0        
@@ -1028,12 +1397,117 @@ startScreen:
         mov     dword [id+ebx], eax
         add     ebx, 4
         loop    .copy_id
+        
+        
+        
         stdcall Client.Init, Client.YourIP, [Client.YourPort]
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], Request.sendID.client, 4        
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], your_id, 16
         stdcall Client.Destroy
 
         jmp     finish
+        
+        
+.settingsBtn:
+        cmp     eax, [settingsBtn.x]
+        jb      finish
+        cmp     ebx, [settingsBtn.y]
+        jb      finish
+        cmp     eax, [settingsBtn.right]
+        ja      finish
+        cmp     ebx, [settingsBtn.bottom]
+        ja      finish
+        
+        
+        mov   ecx, 4
+        mov   esi, Client.YourIP
+        mov   edx, 0
+.outerloop:
+        mov   edi, 3
+.innerloop:
+         
+        mov   al, [esi]
+        
+        cmp   al, '.'
+        je    .dot
+        cmp   al, 0
+        je    .dot
+        jmp   .notdot
+
+.dot:
+        push  ecx
+        mov   ecx, 4
+        sub   ecx, edi
+.dotloop:
+        mov   al, '0'
+        xor   ah, ah
+        mov   [input_ip+edx], ax
+        sub   edx, 4
+        dec   esi      
+        loop  .dotloop
+        inc   esi
+        pop   ecx
+        
+        push  edi
+.incedx:
+        add   edx, 4
+        dec   edi
+        jnz   .incedx
+        
+        add   edx, 4
+        
+        pop   edi
+        
+        mov   eax, 3
+        sub   eax, edi
+        mov   edi, eax
+
+        jmp  .innerloop
+        
+.notdot:        
+        xor   ah, ah
+        mov   [input_ip+edx], ax
+    
+        add   edx, 4
+        add   esi, 1
+        dec   edi
+        jnz   .innerloop
+    
+        jl    .innerloop
+        add   esi, 1
+.endloop:
+        loop  .outerloop 
+        
+        mov   [server_input_num], num_cells_ip
+
+
+        mov     [curScreen], change_ip_screen
+
+        jmp     finish
+        
+    
+    
+    
+        
+settingsScreen:
+        cmp     [curScreen], change_ip_screen
+        jne     mainScreen
+        
+        .backBtn:
+        cmp     eax, [backBtn.x]
+        jb      finish
+        cmp     ebx, [backBtn.y]
+        jb      finish
+        cmp     eax, [backBtn.right]
+        ja      finish
+        cmp     ebx, [backBtn.bottom]
+        ja      finish
+
+
+        mov     [curScreen], start_screen
+        mov     [server_input_num], 0
+
+        jmp     finish        
 
 
 
@@ -1056,6 +1530,7 @@ mainScreen:
         mov     [close_flag], 1
         call    onPaint
         mov     [curScreen], start_screen
+        mov     [server_input_num], 0
         
 
         jmp     finish
@@ -1176,6 +1651,7 @@ serverScreen:
 
 
         mov     [curScreen], start_screen
+        mov     [server_input_num], 0
 
         jmp     finish
         
@@ -1195,6 +1671,8 @@ clientScreen:
         ja      finish
         cmp     ebx, [backBtn.bottom]
         ja      finish
+        
+        mov   [server_input_num], 0
 
 
         mov     [curScreen], start_screen 
@@ -1232,9 +1710,12 @@ section '.data' data readable writeable
   fileSettings  TCHAR 'Settings_id.txt',0
   
   id  TCHAR     '1',0,'2',0,'3',0,'4',0
+  input_ip  TCHAR     '1',0,'2',0,'7',0,'0',0,'0',0,'0',0,'0',0,'0',0,'0',0,'0',0,'0',0,'1',0
   your_id  TCHAR     '1',0,'2',0,'3',0,'4',0
   client_id TCHAR   'Your personal ID:',0
   server_input_id TCHAR  'Input the id of the client:',0
+  change_server_text TCHAR 'Your server ip:',0
+  settingsText TCHAR 'Settings', 0
   
   host_name db 256 dup (?)
   ip_addr   db 32 dup (0)
@@ -1316,6 +1797,7 @@ section '.bss' readable writeable
   res720Btn  BUTTON 0, 0, 0, 0, res720text, menu_color, 0xFFFFFF, 14
   res1080Btn  BUTTON 0, 0, 0, 0, res1080text, main_color, 0xFFFFFF, 14
   effBtn  BUTTON 0, 0, 0, 0, effBtnText, menu_color, 0xFFFFFF, 18
+  settingsBtn  BUTTON 0, 0, 0, 0, settingsText, sec_color, 0xFFFFFF, 14
   
 
   bmpScreen BITMAP
@@ -1401,7 +1883,8 @@ section '.idata' import data readable writeable
          BitBlt, 'BitBlt',\
          CreateCompatibleBitmap,'CreateCompatibleBitmap',\
          GetDIBits, 'GetDIBits',\
-         SetDIBits, 'SetDIBits'
+         SetDIBits, 'SetDIBits',\
+         Ellipse,'Ellipse'
 
   import compress,\
          CreateCompressor, 'CreateCompressor',\

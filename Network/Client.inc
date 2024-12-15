@@ -1,5 +1,5 @@
-;Client.YourIP    db '127.0.0.1', 0
-Client.YourIP    db '192.168.1.11', 0
+;Client.YourIP    db '127.000.000.001', 0
+Client.YourIP    db '192.168.1.11', 0, 0, 0
 Client.YourPort  dd 1234
 Client.YourP2PPort  dd 1111
 
