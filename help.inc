@@ -13,7 +13,7 @@ ends
 
 
 struct MouseListElement
-
+  Left  dd ?
 	Down	dd ?
 	NextP dd ?
   NextH dd ?
@@ -24,6 +24,8 @@ MouseHead MouseListElement 0,0,0
 MouseCur dd MouseHead
 
 MouseTotal dd 0
+MouseControl dd 0
+KeyboardControl dd 0
 
 struct KeyboardListElement
 
@@ -129,6 +131,8 @@ text_max_x TCHAR "Max X: "
 buf_max_x TCHAR 10 dup '0',0
 text_max_y TCHAR "Max Y: "
 buf_max_y TCHAR 10 dup '0',0
+text_clicks TCHAR "Clicks: "
+buf_clicks TCHAR 10 dup '0',0
 
 
 

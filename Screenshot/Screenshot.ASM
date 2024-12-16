@@ -1,5 +1,17 @@
 proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
-                   
+        
+        invoke WaitForSingleObject, [thread_recieve], 100000
+        invoke WaitForSingleObject, [thread_output], 100000 
+        
+        cmp     [minimized], 0
+        jne     .is_minimized  
+        
+        invoke  CreateThread, 0, 0, toScreen, thread_rect_2, 0, 0
+        mov     [thread_output], eax
+.is_minimized: 
+        
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], MouseControl, 4
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], KeyboardControl, 4           
         
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp_res, 4
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], cur_res, 4
@@ -7,17 +19,9 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], change_flag, 4
         
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], min_x, 4
-        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], min_y, 4
-        
-        invoke WaitForSingleObject, [thread_recieve], 100000
-        
-        
-        cmp     [minimized], 0
-        jne     .is_minimized
-        
-        invoke  CreateThread, 0, 0, toScreen, thread_rect_2, 0, 0
-        mov     [thread_output], eax
-.is_minimized:          
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], min_y, 4 
+             
+                  
         
         mov     [temp], 0
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4
@@ -113,7 +117,10 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         mov     eax, [ebx]
         mov     [temp1], eax
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
-        mov   eax, [ebx+4]
+        mov     eax, [ebx+4]
+        mov     [temp1], eax
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
+        mov   eax, [ebx+8]
         mov   ebx, eax  
         pop    ecx      
         loop  .mouseloop
@@ -125,8 +132,8 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
 .clearloop:  
         push  ecx      
         mov   ebx, [MouseHead.NextP]
-        push  dword[ebx+4]
         push  dword[ebx+8]
+        push  dword[ebx+12]
         invoke GlobalUnlock, [MouseHead.NextH]
         invoke GlobalFree, [MouseHead.NextH]
         pop   eax
@@ -175,7 +182,8 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         mov     [thread_rect_2], eax
         
         ;invoke WaitForSingleObject, [thread_decompress], 100000
-        
+        invoke WaitForSingleObject, [thread_recieve], 1000000
+        invoke WaitForSingleObject, [thread_control], 1000000
         
         invoke  CreateThread, 0, 0, recieve_tcp, [temp], 0, 0
         mov     [thread_recieve], eax
@@ -229,6 +237,9 @@ proc recieve_tcp uses eax ebx ecx edx, size
         ;invoke  Decompress, [Decompressor], [lpBuf], [size], [lpbitmap], [dwBmpSize], temp_recieve
         invoke  Decompress, [Decompressor], [lpBuf], [size], [lpbitmap_res], [dwBmpSize], temp_recieve
         
+        mov     [bi_res.biBitCount], 32
+        mov     [bi_res.biCompression], BI_RGB
+        
         invoke  SetDIBits, [hdcMemDC_res], [hbmScreen_res], 0, [bi_res.biHeight], [lpbitmap_res], bi_res ,0
                 
         invoke  BitBlt, [hdcMemDC], [min_x], [min_y], [bi_res.biWidth], [bi_res.biHeight], [hdcMemDC_res], 0, 0, SRCCOPY
@@ -266,6 +277,9 @@ proc send_tcp uses eax ebx ecx edx, size
         
         invoke  GetTickCount
         mov     [ticks_send], eax
+        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], MouseControl, 4
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], KeyboardControl, 4
         
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], cur_res, 4
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp_res, 4
@@ -421,30 +435,63 @@ proc control uses eax ebx ecx edx
         
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp1, 4
         
+        invoke  wvsprintf, buf_clicks, buf_format, temp1
+        
         ;invoke  CreateThread, 0, 0, movemouse, 0, 0, 0
         ;mov     [thread_movemouse], eax
-        
-        ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, dword[MousePos], dword[MousePos+4],0,0
+        cmp     [MouseControl], 0
+        je      .SkipMove
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, dword[MousePos], dword[MousePos+4],0,0
+.SkipMove:
+
         mov     ecx, [temp1]
         test    ecx, ecx
         jz      skipMouseCycle
-.mouseloop:
+mouseloop:
         push    ecx        
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4
-        
+        cmp     [temp], 1
+        jne     RightBtn
+LeftBtn:      
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4  
         mov     eax, [temp]
-        cmp     eax, [MouseDown]
-        je      .skipMouseState
+        ;cmp     eax, [MouseDown]
+        ;je      .skipMouseState
+        
+        cmp     [MouseControl], 0
+        je      skipMouseState
+        
         mov     [MouseDown], eax
         test    eax, eax
         je      .up
-        ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_LEFTDOWN, dword[MousePos], dword[MousePos+4],0,0
-        jmp     .skipMouseState
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_LEFTDOWN, dword[MousePos], dword[MousePos+4],0,0
+        jmp     skipMouseState
 .up:    
-        ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_LEFTUP, dword[MousePos], dword[MousePos+4],0,0   
-.skipMouseState: 
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_LEFTUP, dword[MousePos], dword[MousePos+4],0,0  
+        jmp     skipMouseState 
+        
+RightBtn: 
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4  
+        mov     eax, [temp]
+        ;cmp     eax, [MouseDown]
+        ;je      .skipMouseState
+        
+        cmp     [MouseControl], 0
+        je      skipMouseState
+        
+        mov     [MouseDown], eax
+        test    eax, eax
+        je      .up
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_RIGHTDOWN, dword[MousePos], dword[MousePos+4],0,0
+        jmp     skipMouseState
+.up:    
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_RIGHTUP, dword[MousePos], dword[MousePos+4],0,0
+               
+         
+skipMouseState: 
         pop     ecx
-        loop    .mouseloop
+        dec     ecx
+        jnz     mouseloop
 skipMouseCycle:
              
         pop     [MousePos+4]
@@ -455,8 +502,11 @@ skipMouseCycle:
         
         cmp     [InputSymbol], 0
         je      .finish
-        ;invoke   keybd_event, dword[InputSymbol], 0, 0, 0
-        ;invoke   keybd_event, dword[InputSymbol], 0, 2, 0
+        
+        cmp     [KeyboardControl], 0
+        je      .finish
+        invoke   keybd_event, dword[InputSymbol], 0, 0, 0
+        invoke   keybd_event, dword[InputSymbol], 0, 2, 0
         
 .finish:
    ret
@@ -529,6 +579,7 @@ proc    GetScreenshot uses eax ebx edx , hwnd, left, top, right, bottom
         mov     [ticks_compress], eax
         
         
+        invoke WaitForSingleObject, [thread_send], 100000
         
         mov     eax, [lpbitmap]
         xchg    eax, [lpbitmap_temp]
@@ -578,9 +629,10 @@ proc    GetScreenshot uses eax ebx edx , hwnd, left, top, right, bottom
         mov     [max_x], eax
 .skipmaxx:
 
-        mov     eax, [bi.biHeight]
-        sub     eax, ecx 
-        mov     eax, ecx  
+        ;mov     eax, [bi.biHeight]
+        ;sub     eax, ecx 
+        mov     eax, ecx
+        dec     eax  
         cmp     eax, [min_y]
         ja      .skipminy
         mov     [min_y], eax
@@ -613,7 +665,9 @@ proc    GetScreenshot uses eax ebx edx , hwnd, left, top, right, bottom
         mov     eax, [bi.biHeight]
         dec     eax
         mov     [max_y], eax
-.EndRect:        
+.EndRect:   
+        ;dec     [min_y]
+        ;dec     [max_y]     
         invoke  wvsprintf, buf_min_x, buf_format, min_x
         invoke  wvsprintf, buf_min_y, buf_format, min_y
         invoke  wvsprintf, buf_max_x, buf_format, max_x
@@ -645,9 +699,10 @@ proc    GetScreenshot uses eax ebx edx , hwnd, left, top, right, bottom
         mov     [bi_res.biWidth], eax
         mov     [bi_res.biHeight], edx
         
-        invoke  BitBlt, [hdcMemDC_res], 0, 0, eax, edx, [hdcMemDC], [min_x], [min_y], SRCCOPY
+        invoke  BitBlt, [hdcMemDC_res], 0, 0, [bi_res.biWidth], [bi_res.biHeight], [hdcMemDC], [min_x], [min_y], SRCCOPY
         
-        
+        mov     [bi_res.biBitCount], 32
+        mov     [bi_res.biCompression], BI_RGB
         
         invoke  GetDIBits, [hdcMemDC_res], [hbmScreen_res], 0, [bi_res.biHeight], [lpbitmap_res], bi_res, 0
         
@@ -686,9 +741,6 @@ proc    GetScreenshot uses eax ebx edx , hwnd, left, top, right, bottom
         
 .skipDraw:
         
-        
-        invoke WaitForSingleObject, [thread_send], 100000
-        
         push    0    ;CompressedDataSize   -4
 
         sub     ebx, 4
@@ -709,9 +761,9 @@ proc    GetScreenshot uses eax ebx edx , hwnd, left, top, right, bottom
         invoke  wvsprintf, buf_compress, buf_format, ticks_compress
         pop     ebx
 
-        stdcall  send_tcp, [ebx-4]
-        ;invoke  CreateThread, 0, 0, send_tcp, [ebx-4], 0, 0
-        ;mov     [thread_send], eax
+        ;stdcall  send_tcp, [ebx-4]
+        invoke  CreateThread, 0, 0, send_tcp, [ebx-4], 0, 0
+        mov     [thread_send], eax
         
         invoke  DeleteObject, [hbmScreen_res]
 
