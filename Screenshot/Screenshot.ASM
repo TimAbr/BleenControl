@@ -10,6 +10,7 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         mov     [thread_output], eax
 .is_minimized: 
         
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], SmoothMouse, 4
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], MouseControl, 4
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], KeyboardControl, 4           
         
@@ -145,11 +146,58 @@ proc    ShowImage uses eax ebx ecx edx, filename, left, top, right, bottom
         
         mov   [MouseTotal], 0
         mov   [MouseCur], MouseHead
-.SkipMouseList:        
+.SkipMouseList:         
+
         cmp    [window_active], 0
-        je      .skipSymbol
-        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], InputSymbol, 4
-.skipSymbol:        
+        je      .clearkeyboardlist
+        mov     eax, [KeyboardTotal]
+        mov     [temp1], eax
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
+        
+        cmp    [temp1], 0
+        je      .clearkeyboardlist
+         
+        mov   ebx, [KeyboardHead.NextP]
+        mov   ecx, [temp1]
+.keyboardloop:
+        push   ecx
+        mov     eax, [ebx]
+        mov     [temp1], eax
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
+        mov     eax, [ebx+4]
+        mov     [temp1], eax
+        stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], temp1, 4
+        mov   eax, [ebx+8]
+        mov   ebx, eax  
+        pop    ecx      
+        loop  .keyboardloop
+        
+.clearkeyboardlist:
+        mov   ecx, [KeyboardTotal]
+        test  ecx, ecx
+        jz    .SkipKeyboardList
+.clearKeyboardloop:  
+        push  ecx      
+        mov   ebx, [KeyboardHead.NextP]
+        push  dword[ebx+8]
+        push  dword[ebx+12]
+        invoke GlobalUnlock, [KeyboardHead.NextH]
+        invoke GlobalFree, [KeyboardHead.NextH]
+        pop   eax
+        mov   [KeyboardHead.NextH], eax
+        pop   eax
+        mov   [KeyboardHead.NextP], eax
+        pop   ecx
+        loop  .clearKeyboardloop
+        
+        mov   [KeyboardTotal], 0
+        mov   [KeyboardCur], KeyboardHead
+.SkipKeyboardList:   
+
+
+
+
+     
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], close_flag_buf, 4
         
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
@@ -278,6 +326,8 @@ proc send_tcp uses eax ebx ecx edx, size
         invoke  GetTickCount
         mov     [ticks_send], eax
         
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], SmoothMouse, 4
+        
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], MouseControl, 4
         stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], KeyboardControl, 4
         
@@ -331,10 +381,10 @@ proc send_tcp uses eax ebx ecx edx, size
         
         
         cmp     [window_active], 0
-        je      .skipControlMouse
+        je      .skipControl
         stdcall control
 
-.skipControlMouse: 
+.skipControl: 
         
        
         stdcall ws_socket_send_msg_tcp, [Client.hTCPSock], close_flag, 4
@@ -437,12 +487,24 @@ proc control uses eax ebx ecx edx
         
         invoke  wvsprintf, buf_clicks, buf_format, temp1
         
-        ;invoke  CreateThread, 0, 0, movemouse, 0, 0, 0
-        ;mov     [thread_movemouse], eax
         cmp     [MouseControl], 0
         je      .SkipMove
+        
+        cmp     [SmoothMouse], 0
+        jne     .smooth
         invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, dword[MousePos], dword[MousePos+4],0,0
+        jmp     .SkipMove
+.smooth:        
+        stdcall  drawLine_mouse,[MousePos_last],[MousePos_last+4],[MousePos],[MousePos+4]
 .SkipMove:
+        push    eax
+        push    ebx
+        mov     eax, [MousePos]
+        mov     ebx, [MousePos+4]
+        mov     [MousePos_last],eax 
+        mov     [MousePos_last+4],ebx
+        pop     ebx
+        pop     eax 
 
         mov     ecx, [temp1]
         test    ecx, ecx
@@ -498,17 +560,39 @@ skipMouseCycle:
         pop     [MousePos]
         
         
-        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], InputSymbol, 4
         
-        cmp     [InputSymbol], 0
-        je      .finish
+        
+        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp1, 4
+        
+
+        mov     ecx, [temp1]
+        test    ecx, ecx
+        jz      skipKeyboardCycle
+keyboardloop:
+        push    ecx        
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp1, 4
+        stdcall ws_socket_get_msg_tcp, [Client.hTCPSock], temp, 4  
+        mov     eax, [temp]
         
         cmp     [KeyboardControl], 0
-        je      .finish
-        invoke   keybd_event, dword[InputSymbol], 0, 0, 0
-        invoke   keybd_event, dword[InputSymbol], 0, 2, 0
+        je      skipKeyboardState
         
-.finish:
+        test    eax, eax
+        je      .up
+        invoke   keybd_event, dword[temp1], 0, 0, 0
+        jmp     skipKeyboardState
+.up:    
+        invoke   keybd_event, dword[temp1], 0, 2, 0
+               
+         
+skipKeyboardState: 
+        pop     ecx
+        dec     ecx
+        jnz     keyboardloop
+skipKeyboardCycle:
+        
+control.finish:
    ret
 endp
 

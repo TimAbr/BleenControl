@@ -545,8 +545,10 @@ endp
 
 proc drawLine_mouse uses edi eax ebx ecx edx esi, x1, y1, x2, y2
 
+        xor     edi, edi
+        xor     esi, esi
         push    edi
-
+        
         mov     eax, [y1]
         cmp     eax, [y2]
         jle     .Skip
@@ -613,19 +615,27 @@ proc drawLine_mouse uses edi eax ebx ecx edx esi, x1, y1, x2, y2
         movsx   eax, dl
         mov     [x1], eax
         
+        
         push    edx
         mov     eax, edi
         xor     edx, edx
         ;shr     [sWidth], 2
         div     [sWidth]
         mov     [p.y], eax
-        shr     edx, 2
+        ;shr     edx, 2
+        
+        mov     eax, edi
+        xor     edx, edx
+        ;shr     [sWidth], 2
+        mov     [sHeight], 1080*4
+        div     [sHeight]
         mov     [p.x], edx
         ;shl     [sWidth], 2
         pop     edx
 
+        pusha
         invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y],0,0
-
+        popa
 
 .Compare:      ;B-A
 
@@ -661,13 +671,25 @@ Below45:           ;B<A
         ;shr     [sWidth], 2
         div     [sWidth]
         mov     [p.y], eax
-        shr     edx, 2
+        ;shr     edx, 2
+        mov     eax, edi
+        xor     edx, edx
+        ;shr     [sWidth], 2
+        mov     [sHeight], 1080*4
+        div     [sHeight]
         mov     [p.x], edx
         ;shl     [sWidth], 2
         pop     edx
-
+        
+        cmp     [CountMoves], 50
+        jl      .skipmove
+        pusha
         invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y] ,0,0
-
+        mov     [CountMoves], 0
+        popa
+.skipmove:
+        inc     [CountMoves]
+        
         cmp     edi, [x2]
         jb      .StartLoop
 
@@ -698,7 +720,25 @@ Above45:
         sub     edi, [x1]
 
 .Draw:
-        mov     [edi], eax
+        push    edx
+        mov     eax, edi
+        xor     edx, edx
+        ;shr     [sWidth], 2
+        div     [sWidth]
+        mov     [p.y], eax
+        ;shr     edx, 2
+        mov     [p.x], edx
+        ;shl     [sWidth], 2
+        pop     edx
+        
+        cmp     [CountMoves], 50
+        jl      .skipmove
+        pusha
+        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y] ,0,0
+        mov     [CountMoves], 0
+        popa
+.skipmove:
+        inc     [CountMoves]
 
         cmp     edi, [x2]
         jb      .StartLoop

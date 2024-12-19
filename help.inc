@@ -29,15 +29,15 @@ KeyboardControl dd 0
 
 struct KeyboardListElement
 
-	Down	dd ?
   Char  dd ?
+  Down	dd ?
 	NextP dd ?
   NextH dd ?
 
 ends
 
 KeyboardHead KeyboardListElement 0,0,0,0
-CurKeyboard dd KeyboardHead
+KeyboardCur dd KeyboardHead
 
 KeyboardTotal dd 0
 
@@ -175,8 +175,10 @@ lpBuf dd 0
 minimized dd 0
 
 MousePos dd 0, 0
+MousePos_last dd 0, 0
 MouseDown dd 0
 InputSymbol dd 0
+CountMoves dd 0
 
 res1080 = 1
 res720 = 2
@@ -197,6 +199,7 @@ window_active dd 1
 show_efficiency dd 0
 control_mouse dd 0
 control_keyboard dd 0
+SmoothMouse dd 0
 
 max_x dd 0
 max_y dd 0

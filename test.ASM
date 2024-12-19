@@ -246,6 +246,8 @@ section '.text' code readable executable
         
         mov     [cur_res], 1
         stdcall  recreateBMP 
+        
+        ;stdcall  drawLine_mouse,100,400,500,400
                 
 
 
@@ -923,6 +925,17 @@ efficiency:
 .skip:
         stdcall     drawBtn, effBtn
         
+        
+smooth:
+        cmp         [SmoothMouse],0
+        jne          .active
+        mov         [smoothBtn.color], menu_color
+        jmp         .skip
+.active:
+        mov         [smoothBtn.color], sec_color
+.skip:
+        stdcall     drawBtn, smoothBtn
+        
         cominvk  DDSBack, ReleaseDC, [hdc]
 skipDraw2:
         ret
@@ -1114,6 +1127,9 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         xor     eax,eax
         jmp     .finish
 
+
+
+
   .wmlbtndown: 
         cmp     [mode], server_mode
         jne     .CheckButtons
@@ -1121,6 +1137,7 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         ;invoke WaitForSingleObject, [thread_drawInterface], 1000000 
         ;invoke WaitForSingleObject, [thread_recieve], 1000000
         ;invoke WaitForSingleObject, [thread_output], 1000000
+        invoke WaitForSingleObject, [thread_control], 1000000
         mov     [MouseDown], 1
         
         inc     [MouseTotal]
@@ -1135,19 +1152,22 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         mov     dword[ebx+12], 0
         mov     dword[ebx], 1
         mov     dword[ebx+4], 1
-        
-        
+               
 .CheckButtons:        
         mov     eax, [lparam]
         mov     [p], eax
         stdcall checkButtons, [lparam]
         jmp     .finish
 
+
+
+
    .wmlbtnup: 
         cmp     [mode], server_mode
         jne     .finish
         ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
         ;invoke WaitForSingleObject, [thread_recieve], 1000000
+        invoke WaitForSingleObject, [thread_control], 1000000
         mov     [MouseDown], 0
         
         inc     [MouseTotal]
@@ -1165,11 +1185,16 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         
         jmp     .finish
         
+        
+        
+        
+        
    .wmrbtnup: 
         cmp     [mode], server_mode
         jne     .finish
         ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
         ;invoke WaitForSingleObject, [thread_recieve], 1000000
+        invoke WaitForSingleObject, [thread_control], 1000000
         mov     [MouseDown], 0
         
         inc     [MouseTotal]
@@ -1187,11 +1212,15 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         
         jmp     .finish
         
+        
+        
+        
    .wmrbtndown: 
         cmp     [mode], server_mode
         jne     .finish
         ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
         ;invoke WaitForSingleObject, [thread_recieve], 1000000
+        invoke WaitForSingleObject, [thread_control], 1000000
         mov     [MouseDown], 0
         
         inc     [MouseTotal]
@@ -1209,22 +1238,65 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         
         jmp     .finish
         
+        
+        
+        
    .wmkeyup:
+        cmp     [mode], server_mode
+        jne     .finish
+        ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
+        ;invoke WaitForSingleObject, [thread_recieve], 1000000
+        invoke WaitForSingleObject, [thread_control], 1000000
         mov     [InputSymbol], 0
+        
+        inc     [KeyboardTotal]
+        mov     ebx, [KeyboardCur]
+        invoke  GlobalAlloc, GHND, sizeof.KeyboardListElement
+        mov     [ebx+12], eax
+        invoke  GlobalLock, eax
+        mov     [ebx+8], eax
+        mov     [KeyboardCur], eax
+        mov     ebx, eax
+        mov     dword[ebx+8], 0
+        mov     dword[ebx+12], 0
+        mov     eax, [wparam]
+        mov     dword[ebx], eax
+        mov     dword[ebx+4], 0
+
         jmp     .finish
+
+
+
 
 
   .wmkeydown:
         cmp     [wparam],VK_ESCAPE
         je     .wmdestroy
         
-        cmp     [curScreen], change_ip_screen
+        cmp     [mode], server_mode
         jne     .finish
-        invoke WaitForSingleObject, [thread_drawInterface], 1000000
-        invoke WaitForSingleObject, [thread_recieve], 1000000
+        ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
+        ;invoke WaitForSingleObject, [thread_recieve], 1000000
+        invoke WaitForSingleObject, [thread_control], 1000000
+        
+        inc     [KeyboardTotal]
+        mov     ebx, [KeyboardCur]
+        invoke  GlobalAlloc, GHND, sizeof.KeyboardListElement
+        mov     [ebx+12], eax
+        invoke  GlobalLock, eax
+        mov     [ebx+8], eax
+        mov     [KeyboardCur], eax
+        mov     ebx, eax
+        mov     dword[ebx+8], 0
+        mov     dword[ebx+12], 0
         mov     eax, [wparam]
         mov     [InputSymbol], eax
+        mov     dword[ebx], eax
+        mov     dword[ebx+4], 1
         jmp     .finish
+  
+  
+  
   
   .wmchar:
         cmp     [curScreen], server_screen
@@ -1235,6 +1307,8 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         jne     .finish
         stdcall     changeIP,[wparam]
         jmp     .finish 
+        
+        
         
 
   .wmpaint:
@@ -1605,6 +1679,22 @@ mainScreen:
         cmp     [curScreen], main_screen
         jne     serverScreen
         
+.smoothBtn:
+        cmp     [mode], server_mode
+        jne     .mouseBtn
+        cmp     eax, [smoothBtn.x]
+        jb      .mouseBtn
+        cmp     ebx, [smoothBtn.y]
+        jb      .mouseBtn
+        cmp     eax, [smoothBtn.right]
+        ja      .mouseBtn
+        cmp     ebx, [smoothBtn.bottom]
+        ja      .mouseBtn
+
+        xor     [SmoothMouse], 1        
+
+        jmp     finish
+        
 .mouseBtn:
         cmp     [mode], server_mode
         jne     .keyboardBtn
@@ -1862,6 +1952,7 @@ section '.data' data readable writeable
   effBtnText TCHAR 'Show efficiency', 0
   mouseBtnText TCHAR 'Mouse', 0
   keyboardBtnText TCHAR 'Keyboard', 0
+  smoothText TCHAR 'Smooth mouse', 0
   off_text TCHAR 'Off', 0
   on_text TCHAR 'On', 0
   
@@ -1936,6 +2027,7 @@ section '.bss' readable writeable
   mouseBtn  BUTTON 40, 40, 160, 70, mouseBtnText, menu_color, 0xFFFFFF, 15
   keyboardBtn  BUTTON 40, 80, 160, 110, keyboardBtnText, menu_color, 0xFFFFFF, 15
   effBtn  BUTTON 40, 120, 160, 150, effBtnText, menu_color, 0xFFFFFF, 15
+  smoothBtn  BUTTON 40, 160, 160, 190, smoothText, menu_color, 0xFFFFFF, 15
   
 
   bmpScreen BITMAP
