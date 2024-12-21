@@ -461,11 +461,18 @@ endp
 
 
 
+
+
 proc control uses eax ebx ecx edx
 
 
         push    [MousePos]
         push    [MousePos+4]
+        
+        mov     eax, [MousePos]
+        mov     [MousePos_temp], eax
+        mov     eax, [MousePos+4]
+        mov     [MousePos_temp+4], eax
         
         mov     eax, 65535
         xor     edx, edx
@@ -495,12 +502,12 @@ proc control uses eax ebx ecx edx
         invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, dword[MousePos], dword[MousePos+4],0,0
         jmp     .SkipMove
 .smooth:        
-        stdcall  drawLine_mouse,[MousePos_last],[MousePos_last+4],[MousePos],[MousePos+4]
+        stdcall  drawLine_mouse,[MousePos_last],[MousePos_last+4],[MousePos_temp],[MousePos_temp+4]
 .SkipMove:
         push    eax
         push    ebx
-        mov     eax, [MousePos]
-        mov     ebx, [MousePos+4]
+        mov     eax, [MousePos_temp]
+        mov     ebx, [MousePos_temp+4]
         mov     [MousePos_last],eax 
         mov     [MousePos_last+4],ebx
         pop     ebx
@@ -595,6 +602,146 @@ skipKeyboardCycle:
 control.finish:
    ret
 endp
+
+
+
+proc  compress_2 uses eax ebx ecx edx
+        push    esi
+        push    edi
+        
+        cmp     [change_flag], 0
+        jne     .SkipDirtyRect
+        
+        cmp     [temp_flag], 0
+        jne     .SkipDirtyRect
+        
+        ;find the changed part
+        push    [lpbitmap]
+        push    [lpbitmap_temp]
+        
+        mov     [max_x_proc], 0
+        mov     [max_y_proc], 0
+        mov     eax,  [bi.biWidth]
+        mov     [min_x_proc], eax
+        mov     eax, [bi.biHeight]
+        mov     [min_y_proc], eax 
+        mov     edi, dword[lpbitmap_temp]
+        mov     ecx, [bi.biWidth]
+        shl     ecx, 1
+        add     edi, ecx
+        mov     esi, dword[lpbitmap]
+        add     esi, ecx
+        mov     ecx, [bi.biHeight]
+.outer_loop:
+        mov     edx, [bi.biWidth]
+        shr     edx, 1
+        
+.inner_loop:        
+        mov     eax, dword[esi]
+        xor     eax, dword[edi]
+        jz      .next
+        
+        mov     eax, [bi.biWidth]
+        sub     eax, edx 
+        cmp     eax, [min_x_proc]
+        ja      .skipminx
+        mov     [min_x_proc], eax
+.skipminx:           
+        cmp     eax, [max_x_proc]
+        jb      .skipmaxx
+        mov     [max_x_proc], eax
+.skipmaxx:
+
+        ;mov     eax, [bi.biHeight]
+        ;sub     eax, ecx 
+        mov     eax, ecx
+        dec     eax  
+        cmp     eax, [min_y_proc]
+        ja      .skipminy
+        mov     [min_y_proc], eax
+.skipminy:           
+        cmp     eax, [max_y_proc]
+        jb      .skipmaxy
+        mov     [max_y_proc], eax
+.skipmaxy:
+        
+               
+.next:
+        add     edi, 4
+        add     esi, 4
+        dec     edx
+        jnz     .inner_loop          
+        
+        loop    .outer_loop
+        
+        
+        pop     [lpbitmap_temp]
+        pop     [lpbitmap]
+        jmp     .EndRect
+        
+.SkipDirtyRect:
+        mov     [min_x_proc], 0
+        mov     [min_y_proc], 0
+        mov     eax, [bi.biWidth]
+        shr     eax,1
+        mov     [min_x_proc], eax
+        shl     eax,1
+        dec     eax
+        mov     [max_x_proc], eax
+        mov     eax, [bi.biHeight]
+        shr     eax,1
+        mov     [min_y_proc], eax
+        shl     eax,1
+        dec     eax
+        mov     [max_y_proc], eax
+.EndRect:   
+        
+        pop    edi
+        pop    esi
+        
+        
+        mov     eax, [max_x_proc]
+        sub     eax, [min_x_proc]
+        inc     eax
+        
+        mov     edx, [max_y_proc]
+        sub     edx, [min_y_proc]
+        inc     edx
+        
+        push    eax
+        push    edx
+        
+        invoke  CreateCompatibleBitmap, [hdcMemDC_proc], eax, edx
+        mov     [hbmScreen_res_proc],eax 
+        
+        invoke  SelectObject, [hdcMemDC_res_proc], eax
+        
+        pop     edx
+        pop     eax
+        
+        mov     [bi_res.biWidth], eax
+        mov     [bi_res.biHeight], edx
+        
+        invoke  BitBlt, [hdcMemDC_res_proc], 0, 0, [bi_res.biWidth], [bi_res.biHeight], [hdcMemDC], [min_x_proc], [min_y_proc], SRCCOPY
+        
+        mov     [bi_res.biBitCount], 32
+        mov     [bi_res.biCompression], BI_RGB
+        
+        mov     ebx,[dwBmpSize]
+        shr     ebx, 1
+        add     ebx, [lpbitmap_res]
+        invoke  GetDIBits, [hdcMemDC_res_proc], [hbmScreen_res_proc], 0, [bi_res.biHeight], ebx, bi_res, 0
+        
+        mov     eax, [bi_res.biWidth]
+        shl     eax, 2
+        mul     [bi_res.biHeight]
+        mov     [bi_res.biSizeImage], eax        
+        
+        invoke  Compress, [Compressor], [lpbitmap_res], [bi_res.biSizeImage], [lpBuf], [dwBmpSize], temp
+        add     ebx, 4
+    ret
+endp
+
 
 
 proc    GetScreenshot uses eax ebx edx , hwnd, left, top, right, bottom

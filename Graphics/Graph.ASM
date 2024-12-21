@@ -544,7 +544,7 @@ EndProc:
 endp
 
 proc drawLine_mouse uses edi eax ebx ecx edx esi, x1, y1, x2, y2
-
+        
         xor     edi, edi
         xor     esi, esi
         push    edi
@@ -619,22 +619,21 @@ proc drawLine_mouse uses edi eax ebx ecx edx esi, x1, y1, x2, y2
         push    edx
         mov     eax, edi
         xor     edx, edx
-        ;shr     [sWidth], 2
         div     [sWidth]
         mov     [p.y], eax
-        ;shr     edx, 2
         
         mov     eax, edi
         xor     edx, edx
-        ;shr     [sWidth], 2
-        mov     [sHeight], 1080*4
-        div     [sHeight]
+        div     [sWidth]
+        shr     edx, 2
         mov     [p.x], edx
-        ;shl     [sWidth], 2
         pop     edx
 
         pusha
-        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y],0,0
+        invoke  SetThreadDpiAwarenessContext, -2
+        invoke   SetCursorPos, [p.x], [p.y]
+        invoke  SetThreadDpiAwarenessContext, -1
+        ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y],0,0
         popa
 
 .Compare:      ;B-A
@@ -668,23 +667,24 @@ Below45:           ;B<A
         push    edx
         mov     eax, edi
         xor     edx, edx
-        ;shr     [sWidth], 2
         div     [sWidth]
         mov     [p.y], eax
-        ;shr     edx, 2
+
+        
         mov     eax, edi
         xor     edx, edx
-        ;shr     [sWidth], 2
-        mov     [sHeight], 1080*4
-        div     [sHeight]
+        div     [sWidth]
+        shr     edx, 2
         mov     [p.x], edx
-        ;shl     [sWidth], 2
         pop     edx
         
-        cmp     [CountMoves], 50
+        cmp     [CountMoves], 1
         jl      .skipmove
         pusha
-        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y] ,0,0
+        invoke  SetThreadDpiAwarenessContext, -2
+        invoke   SetCursorPos, [p.x], [p.y]
+        invoke  SetThreadDpiAwarenessContext, -1
+        ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y] ,0,0
         mov     [CountMoves], 0
         popa
 .skipmove:
@@ -723,18 +723,23 @@ Above45:
         push    edx
         mov     eax, edi
         xor     edx, edx
-        ;shr     [sWidth], 2
         div     [sWidth]
         mov     [p.y], eax
-        ;shr     edx, 2
+        
+        mov     eax, edi
+        xor     edx, edx
+        div     [sWidth]
+        shr     edx, 2
         mov     [p.x], edx
-        ;shl     [sWidth], 2
         pop     edx
         
-        cmp     [CountMoves], 50
+        cmp     [CountMoves], 1
         jl      .skipmove
-        pusha
-        invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y] ,0,0
+        pusha 
+        invoke  SetThreadDpiAwarenessContext, -2
+        invoke   SetCursorPos, [p.x], [p.y]
+        invoke  SetThreadDpiAwarenessContext, -1
+        ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y] ,0,0
         mov     [CountMoves], 0
         popa
 .skipmove:
@@ -744,6 +749,5 @@ Above45:
         jb      .StartLoop
 
 EndProc:
-
         ret
 endp

@@ -176,6 +176,7 @@ minimized dd 0
 
 MousePos dd 0, 0
 MousePos_last dd 0, 0
+MousePos_temp dd 0, 0
 MouseDown dd 0
 InputSymbol dd 0
 CountMoves dd 0
@@ -205,3 +206,9 @@ max_x dd 0
 max_y dd 0
 min_x dd 0
 min_y dd 0
+
+
+max_x_proc dd 0
+max_y_proc dd 0
+min_x_proc dd 0
+min_y_proc dd 0

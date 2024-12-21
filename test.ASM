@@ -143,6 +143,9 @@ section '.text' code readable executable
         ;создание компрессора для сжатия изображений
         invoke  CreateCompressor, 4, NULL, Compressor
         invoke  CreateDecompressor, 4, NULL, Decompressor
+        
+        invoke  CreateCompressor, 4, NULL, Compressor1
+        invoke  CreateDecompressor, 4, NULL, Decompressor1
          
         stdcall Client.Destroy
         
@@ -247,7 +250,7 @@ section '.text' code readable executable
         mov     [cur_res], 1
         stdcall  recreateBMP 
         
-        ;stdcall  drawLine_mouse,100,400,500,400
+        stdcall  drawLine_mouse,100,100,500,500
                 
 
 
