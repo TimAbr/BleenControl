@@ -158,11 +158,13 @@ thread_compress dd 0
 thread_control dd 0
 thread_drawInterface dd 0
 thread_movemouse dd 0
+thread_decompress dd 0
 
 mut_min dd 0
 mut_name TCHAR "mut_min",0
 
 temp_recieve dd 0
+temp_recieve_1 dd 0
 
 mouse_last dd 0
 
@@ -212,3 +214,5 @@ max_x_proc dd 0
 max_y_proc dd 0
 min_x_proc dd 0
 min_y_proc dd 0
+
+temp_compress_2 dd 0

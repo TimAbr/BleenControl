@@ -160,6 +160,9 @@ section '.text' code readable executable
         invoke  CreateCompatibleDC, [hdcMemDC]
         mov     [hdcMemDC_res],eax
         
+        invoke  CreateCompatibleDC, [hdcMemDC]
+        mov     [hdcMemDC_res_proc],eax
+        
         invoke  CreateCompatibleBitmap, [hdcScreen], [image_width], [image_height]
         mov     [hbmScreen],eax 
         
@@ -228,6 +231,22 @@ section '.text' code readable executable
         mov     [bi_res.biYPelsPerMeter], 0
         mov     [bi_res.biClrUsed], 0
         mov     [bi_res.biClrImportant], 0
+        
+        
+        mov     [bi_res_proc.biSize], sizeof.BITMAPINFOHEADER
+        mov     eax, [bmpScreen.bmWidth]
+        mov     [bi_res_proc.biWidth], eax
+        mov     eax, [bmpScreen.bmHeight]
+        mov     [bi_res_proc.biHeight], eax
+        mov     [bi_res_proc.biPlanes], 1
+        mov     [bi_res_proc.biBitCount], 32
+        mov     [bi_res_proc.biCompression], BI_RGB
+        mov     [bi_res_proc.biSizeImage], 0
+        mov     [bi_res_proc.biXPelsPerMeter], 0
+        mov     [bi_res_proc.biYPelsPerMeter], 0
+        mov     [bi_res_proc.biClrUsed], 0
+        mov     [bi_res_proc.biClrImportant], 0
+        
         
         invoke  GlobalAlloc, GHND, [dwBmpSize]
         mov     [hDIB_temp], eax 
@@ -2044,10 +2063,13 @@ section '.bss' readable writeable
   hFile      dd ?
   
   bi_res     BITMAPINFOHEADER
+  bi_res_proc     BITMAPINFOHEADER
   hDIB_res dd ?
   lpbitmap_res dd ?
   hbmScreen_res dd ?
+  hbmScreen_res_proc dd ?
   hdcMemDC_res dd ?
+  hdcMemDC_res_proc dd ?
 
   Compressor  dd ?
   Decompressor  dd ?
