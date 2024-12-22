@@ -161,7 +161,13 @@ section '.text' code readable executable
         mov     [hdcMemDC_res],eax
         
         invoke  CreateCompatibleDC, [hdcMemDC]
-        mov     [hdcMemDC_res_proc],eax
+        mov     [hdcMemDC_res_proc_2],eax
+        
+        invoke  CreateCompatibleDC, [hdcMemDC]
+        mov     [hdcMemDC_res_proc_3],eax
+        
+        invoke  CreateCompatibleDC, [hdcMemDC]
+        mov     [hdcMemDC_res_proc_4],eax
         
         invoke  CreateCompatibleBitmap, [hdcScreen], [image_width], [image_height]
         mov     [hbmScreen],eax 
@@ -233,20 +239,51 @@ section '.text' code readable executable
         mov     [bi_res.biClrImportant], 0
         
         
-        mov     [bi_res_proc.biSize], sizeof.BITMAPINFOHEADER
+        mov     [bi_res_proc_2.biSize], sizeof.BITMAPINFOHEADER
         mov     eax, [bmpScreen.bmWidth]
-        mov     [bi_res_proc.biWidth], eax
+        mov     [bi_res_proc_2.biWidth], eax
         mov     eax, [bmpScreen.bmHeight]
-        mov     [bi_res_proc.biHeight], eax
-        mov     [bi_res_proc.biPlanes], 1
-        mov     [bi_res_proc.biBitCount], 32
-        mov     [bi_res_proc.biCompression], BI_RGB
-        mov     [bi_res_proc.biSizeImage], 0
-        mov     [bi_res_proc.biXPelsPerMeter], 0
-        mov     [bi_res_proc.biYPelsPerMeter], 0
-        mov     [bi_res_proc.biClrUsed], 0
-        mov     [bi_res_proc.biClrImportant], 0
+        mov     [bi_res_proc_2.biHeight], eax
+        mov     [bi_res_proc_2.biPlanes], 1
+        mov     [bi_res_proc_2.biBitCount], 32
+        mov     [bi_res_proc_2.biCompression], BI_RGB
+        mov     [bi_res_proc_2.biSizeImage], 0
+        mov     [bi_res_proc_2.biXPelsPerMeter], 0
+        mov     [bi_res_proc_2.biYPelsPerMeter], 0
+        mov     [bi_res_proc_2.biClrUsed], 0
+        mov     [bi_res_proc_2.biClrImportant], 0
         
+        
+        
+        mov     [bi_res_proc_3.biSize], sizeof.BITMAPINFOHEADER
+        mov     eax, [bmpScreen.bmWidth]
+        mov     [bi_res_proc_3.biWidth], eax
+        mov     eax, [bmpScreen.bmHeight]
+        mov     [bi_res_proc_3.biHeight], eax
+        mov     [bi_res_proc_3.biPlanes], 1
+        mov     [bi_res_proc_3.biBitCount], 32
+        mov     [bi_res_proc_3.biCompression], BI_RGB
+        mov     [bi_res_proc_3.biSizeImage], 0
+        mov     [bi_res_proc_3.biXPelsPerMeter], 0
+        mov     [bi_res_proc_3.biYPelsPerMeter], 0
+        mov     [bi_res_proc_3.biClrUsed], 0
+        mov     [bi_res_proc_3.biClrImportant], 0
+        
+        
+        
+        mov     [bi_res_proc_4.biSize], sizeof.BITMAPINFOHEADER
+        mov     eax, [bmpScreen.bmWidth]
+        mov     [bi_res_proc_4.biWidth], eax
+        mov     eax, [bmpScreen.bmHeight]
+        mov     [bi_res_proc_4.biHeight], eax
+        mov     [bi_res_proc_4.biPlanes], 1
+        mov     [bi_res_proc_4.biBitCount], 32
+        mov     [bi_res_proc_4.biCompression], BI_RGB
+        mov     [bi_res_proc_4.biSizeImage], 0
+        mov     [bi_res_proc_4.biXPelsPerMeter], 0
+        mov     [bi_res_proc_4.biYPelsPerMeter], 0
+        mov     [bi_res_proc_4.biClrUsed], 0
+        mov     [bi_res_proc_4.biClrImportant], 0
         
         invoke  GlobalAlloc, GHND, [dwBmpSize]
         mov     [hDIB_temp], eax 
@@ -255,7 +292,8 @@ section '.text' code readable executable
         mov     [lpbitmap_temp], eax 
         
         
-        
+        invoke  CreateMutex,NULL, FALSE, NULL
+        mov     [mutex], eax
         
         
         
@@ -649,12 +687,16 @@ proc  drawAddClient uses eax
     stdcall Client.Destroy
     
     cmp [isReady], 0
-    je  .finish
+    je  .ShowLoad
     stdcall Server.Init
     mov    [mode], client_mode
     
     
     mov  [curScreen], main_screen
+    
+.ShowLoad:
+
+
 .finish:
     ret
 endp
@@ -1125,6 +1167,9 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         
         cmp     eax,WM_KEYUP
         je      .wmkeyup
+        
+        cmp     eax,WM_MOUSEWHEEL
+        je      .wmmousewheel
 
   .defwndproc:
         invoke  DefWindowProc,[hwnd],[wmsg],[wparam],[lparam]
@@ -1145,24 +1190,25 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
   .wmdestroy:
         invoke WaitForSingleObject, [thread_drawInterface], 1000000
         invoke WaitForSingleObject, [thread_recieve], 1000000
+        invoke WaitForSingleObject, [thread_output], 1000000
+        invoke WaitForSingleObject, [thread_send], 1000000
         invoke  PostQuitMessage,0
         xor     eax,eax
         jmp     .finish
 
 
-
-
-  .wmlbtndown: 
+  .wmmousewheel:
+  
         cmp     [mode], server_mode
-        jne     .CheckButtons
+        jne     .finish
+.wait1:        
+        invoke WaitForSingleObject, [mutex], 1000000
+        cmp    eax, 0x0
+        jne     .wait1
+
+        ;invoke WaitForSingleObject, [thread_send], 1000000
+        ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
         
-        ;invoke WaitForSingleObject, [thread_drawInterface], 1000000 
-        ;invoke WaitForSingleObject, [thread_recieve], 1000000
-        ;invoke WaitForSingleObject, [thread_output], 1000000
-        invoke WaitForSingleObject, [thread_control], 1000000
-        mov     [MouseDown], 1
-        
-        inc     [MouseTotal]
         mov     ebx, [MouseCur]
         invoke  GlobalAlloc, GHND, sizeof.MouseListElement
         mov     [ebx+12], eax
@@ -1172,8 +1218,50 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         mov     ebx, eax
         mov     dword[ebx+8], 0
         mov     dword[ebx+12], 0
+        mov     dword[ebx], 2
+        movsx   eax, word [wparam+2]
+        mov     dword[ebx+4], eax
+        
+        inc     [MouseTotal]
+        
+        invoke   ReleaseMutex, [mutex]
+        
+        jmp     .finish
+
+  .wmlbtndown: 
+        cmp     [mode], server_mode
+        jne     .CheckButtons
+        
+        
+.wait2:        
+        invoke WaitForSingleObject, [mutex], 1000000
+        cmp    eax, 0x0
+        jne     .wait2
+        
+        
+        ;invoke WaitForSingleObject, [thread_drawInterface], 1000000 
+        ;invoke WaitForSingleObject, [thread_send], 1000000
+        
+        mov     [MouseDown], 1
+        
+        mov     ebx, [MouseCur]
+        invoke  GlobalAlloc, GHND, sizeof.MouseListElement
+        mov     [ebx+12], eax
+        invoke  GlobalLock, eax
+        mov     [ebx+8], eax   
+        mov     [MouseCur], eax
+        mov     ebx, eax
+        mov     dword[ebx+8], 0
+        mov     dword[ebx+12], 0
         mov     dword[ebx], 1
         mov     dword[ebx+4], 1
+        
+        inc     [MouseTotal]
+        
+        invoke   ReleaseMutex, [mutex]
+        
+        
+        
                
 .CheckButtons:        
         mov     eax, [lparam]
@@ -1187,13 +1275,18 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
    .wmlbtnup: 
         cmp     [mode], server_mode
         jne     .finish
+        
+.wait3:        
+        invoke WaitForSingleObject, [mutex], 1000000
+        cmp    eax, 0x0
+        jne     .wait3
+        
         ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
-        ;invoke WaitForSingleObject, [thread_recieve], 1000000
-        invoke WaitForSingleObject, [thread_control], 1000000
+        ;invoke WaitForSingleObject, [thread_send], 1000000
+        
         mov     [MouseDown], 0
         
-        inc     [MouseTotal]
-        mov     ebx, [MouseCur]
+        mov     ebx, [MouseCur] 
         invoke  GlobalAlloc, GHND, sizeof.MouseListElement
         mov     [ebx+12], eax
         invoke  GlobalLock, eax
@@ -1205,6 +1298,10 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         mov     dword[ebx], 1
         mov     dword[ebx+4], 0
         
+        inc     [MouseTotal]
+        
+        invoke   ReleaseMutex, [mutex]
+        
         jmp     .finish
         
         
@@ -1214,13 +1311,18 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
    .wmrbtnup: 
         cmp     [mode], server_mode
         jne     .finish
+   
+.wait4:        
+        invoke WaitForSingleObject, [mutex], 1000000
+        cmp    eax, 0x0
+        jne     .wait4     
+        
         ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
-        ;invoke WaitForSingleObject, [thread_recieve], 1000000
-        invoke WaitForSingleObject, [thread_control], 1000000
+        ;invoke WaitForSingleObject, [thread_send], 1000000
+        
         mov     [MouseDown], 0
         
-        inc     [MouseTotal]
-        mov     ebx, [MouseCur]
+        mov     ebx, [MouseCur]  
         invoke  GlobalAlloc, GHND, sizeof.MouseListElement
         mov     [ebx+12], eax
         invoke  GlobalLock, eax
@@ -1232,6 +1334,10 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         mov     dword[ebx], 0
         mov     dword[ebx+4], 0
         
+        inc     [MouseTotal]
+        
+        invoke   ReleaseMutex, [mutex]
+        
         jmp     .finish
         
         
@@ -1240,13 +1346,18 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
    .wmrbtndown: 
         cmp     [mode], server_mode
         jne     .finish
+        
+.wait5:        
+        invoke WaitForSingleObject, [mutex], 1000000
+        cmp    eax, 0x0
+        jne     .wait5
+        
         ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
-        ;invoke WaitForSingleObject, [thread_recieve], 1000000
-        invoke WaitForSingleObject, [thread_control], 1000000
+        ;invoke WaitForSingleObject, [thread_send], 1000000
+        
         mov     [MouseDown], 0
         
-        inc     [MouseTotal]
-        mov     ebx, [MouseCur]
+        mov     ebx, [MouseCur]   
         invoke  GlobalAlloc, GHND, sizeof.MouseListElement
         mov     [ebx+12], eax
         invoke  GlobalLock, eax
@@ -1258,6 +1369,10 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         mov     dword[ebx], 0
         mov     dword[ebx+4], 1
         
+        inc     [MouseTotal]
+        
+        invoke   ReleaseMutex, [mutex]
+        
         jmp     .finish
         
         
@@ -1266,13 +1381,18 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
    .wmkeyup:
         cmp     [mode], server_mode
         jne     .finish
+        
+.wait6:        
+        invoke WaitForSingleObject, [mutex], 1000000
+        cmp    eax, 0x0
+        jne     .wait6
+        
         ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
-        ;invoke WaitForSingleObject, [thread_recieve], 1000000
-        invoke WaitForSingleObject, [thread_control], 1000000
+        ;invoke WaitForSingleObject, [thread_send], 1000000
+        
         mov     [InputSymbol], 0
         
-        inc     [KeyboardTotal]
-        mov     ebx, [KeyboardCur]
+        mov     ebx, [KeyboardCur]    
         invoke  GlobalAlloc, GHND, sizeof.KeyboardListElement
         mov     [ebx+12], eax
         invoke  GlobalLock, eax
@@ -1284,6 +1404,10 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         mov     eax, [wparam]
         mov     dword[ebx], eax
         mov     dword[ebx+4], 0
+        
+        inc     [KeyboardTotal]
+        
+        invoke   ReleaseMutex, [mutex]
 
         jmp     .finish
 
@@ -1297,12 +1421,16 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         
         cmp     [mode], server_mode
         jne     .finish
-        ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
-        ;invoke WaitForSingleObject, [thread_recieve], 1000000
-        invoke WaitForSingleObject, [thread_control], 1000000
         
-        inc     [KeyboardTotal]
-        mov     ebx, [KeyboardCur]
+.wait7:        
+        invoke WaitForSingleObject, [mutex], 1000000
+        cmp    eax, 0x0
+        jne     .wait7
+        
+        ;invoke WaitForSingleObject, [thread_drawInterface], 1000000
+        ;invoke WaitForSingleObject, [thread_send], 1000000
+        
+        mov     ebx, [KeyboardCur] 
         invoke  GlobalAlloc, GHND, sizeof.KeyboardListElement
         mov     [ebx+12], eax
         invoke  GlobalLock, eax
@@ -1315,6 +1443,11 @@ proc WindowProc uses ebx esi edi, hwnd,wmsg,wparam,lparam
         mov     [InputSymbol], eax
         mov     dword[ebx], eax
         mov     dword[ebx+4], 1
+        
+        inc     [KeyboardTotal]
+        
+        invoke   ReleaseMutex, [mutex]
+        
         jmp     .finish
   
   
@@ -1773,6 +1906,10 @@ mainScreen:
         cmp     ebx, [backBtn.bottom]
         ja      .res360Btn
 
+        invoke WaitForSingleObject, [thread_drawInterface], 1000000
+        invoke WaitForSingleObject, [thread_recieve], 1000000
+        invoke WaitForSingleObject, [thread_output], 1000000
+        invoke WaitForSingleObject, [thread_send], 1000000
         mov     [close_flag], 1
         call    onPaint
         mov     [curScreen], start_screen
@@ -2063,13 +2200,19 @@ section '.bss' readable writeable
   hFile      dd ?
   
   bi_res     BITMAPINFOHEADER
-  bi_res_proc     BITMAPINFOHEADER
+  bi_res_proc_2     BITMAPINFOHEADER
+  bi_res_proc_3     BITMAPINFOHEADER
+  bi_res_proc_4     BITMAPINFOHEADER
   hDIB_res dd ?
   lpbitmap_res dd ?
   hbmScreen_res dd ?
-  hbmScreen_res_proc dd ?
+  hbmScreen_res_proc_2 dd ?
+  hbmScreen_res_proc_3 dd ?
+  hbmScreen_res_proc_4 dd ?
   hdcMemDC_res dd ?
-  hdcMemDC_res_proc dd ?
+  hdcMemDC_res_proc_2 dd ?
+  hdcMemDC_res_proc_3 dd ?
+  hdcMemDC_res_proc_4 dd ?
 
   Compressor  dd ?
   Decompressor  dd ?

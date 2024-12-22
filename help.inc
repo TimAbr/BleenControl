@@ -152,13 +152,14 @@ thread_rect_4  dd 0, 0, 0, 0
 end_flag_4   dd 1
 
 thread_output dd 0
-thread_send dd 0
 thread_recieve dd 0
-thread_compress dd 0
 thread_control dd 0
-thread_drawInterface dd 0
 thread_movemouse dd 0
-thread_decompress dd 0
+thread_compress_2 dd 0
+thread_compress_3 dd 0
+thread_compress_4 dd 0
+thread_drawInterface dd 0
+thread_send dd 0
 
 mut_min dd 0
 mut_name TCHAR "mut_min",0
@@ -210,9 +211,30 @@ min_x dd 0
 min_y dd 0
 
 
-max_x_proc dd 0
-max_y_proc dd 0
-min_x_proc dd 0
-min_y_proc dd 0
+max_x_proc_2 dd 0
+max_y_proc_2 dd 0
+min_x_proc_2 dd 0
+min_y_proc_2 dd 0
+
+
+max_x_proc_3 dd 0
+max_y_proc_3 dd 0
+min_x_proc_3 dd 0
+min_y_proc_3 dd 0
+
+max_x_proc_4 dd 0
+max_y_proc_4 dd 0
+min_x_proc_4 dd 0
+min_y_proc_4 dd 0
 
 temp_compress_2 dd 0
+temp_compress_3 dd 0
+temp_compress_4 dd 0
+
+CircleRadius = 10
+Circle1 dd 0
+Circle2 dd 0
+Circle3 dd 0
+
+mutex dd 0
+send_running dd 0

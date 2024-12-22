@@ -161,7 +161,9 @@ proc    drawAddTemplate uses eax ebx ecx edx, show_str
     add   [rs.left], eax
     add   [rs.right], eax
 
-    loop .drawCells  
+    loop .drawCells
+    
+    
     
     stdcall drawBtn, backBtn 
      
@@ -549,14 +551,14 @@ proc drawLine_mouse uses edi eax ebx ecx edx esi, x1, y1, x2, y2
         xor     esi, esi
         push    edi
         
-        mov     eax, [y1]
-        cmp     eax, [y2]
-        jle     .Skip
-        xchg    eax, [y2]
-        xchg    [y1], eax
-        mov     eax, [x1]
-        xchg    eax, [x2]
-        xchg    [x1], eax
+        ;mov     eax, [y1]
+        ;cmp     eax, [y2]
+        ;jle     .Skip
+        ;xchg    eax, [y2]
+        ;xchg    [y1], eax
+        ;mov     eax, [x1]
+        ;xchg    eax, [x2]
+        ;xchg    [x1], eax
 .Skip:
 
         mov     eax, [y1]
@@ -633,6 +635,7 @@ proc drawLine_mouse uses edi eax ebx ecx edx esi, x1, y1, x2, y2
         invoke  SetThreadDpiAwarenessContext, -2
         invoke   SetCursorPos, [p.x], [p.y]
         invoke  SetThreadDpiAwarenessContext, -1
+        invoke  Sleep, 1
         ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y],0,0
         popa
 
@@ -678,20 +681,27 @@ Below45:           ;B<A
         mov     [p.x], edx
         pop     edx
         
-        cmp     [CountMoves], 1
+        cmp     [CountMoves], 70
         jl      .skipmove
         pusha
         invoke  SetThreadDpiAwarenessContext, -2
         invoke   SetCursorPos, [p.x], [p.y]
         invoke  SetThreadDpiAwarenessContext, -1
+        invoke  Sleep, 1
         ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y] ,0,0
         mov     [CountMoves], 0
         popa
 .skipmove:
         inc     [CountMoves]
         
-        cmp     edi, [x2]
-        jb      .StartLoop
+        mov     eax, [x2]
+        add     eax, [sWidth]
+        cmp     edi, eax
+        jg      .StartLoop
+        sub     eax, [sWidth]
+        sub     eax, [sWidth]
+        cmp     edi, eax
+        jl      .StartLoop
 
 
         jmp     EndProc
@@ -733,20 +743,27 @@ Above45:
         mov     [p.x], edx
         pop     edx
         
-        cmp     [CountMoves], 1
+        cmp     [CountMoves], 70
         jl      .skipmove
         pusha 
         invoke  SetThreadDpiAwarenessContext, -2
         invoke   SetCursorPos, [p.x], [p.y]
         invoke  SetThreadDpiAwarenessContext, -1
+        invoke  Sleep, 1
         ;invoke   mouse_event, MOUSEEVENTF_ABSOLUTE+MOUSEEVENTF_MOVE, [p.x], [p.y] ,0,0
         mov     [CountMoves], 0
         popa
 .skipmove:
         inc     [CountMoves]
 
-        cmp     edi, [x2]
-        jb      .StartLoop
+        mov     eax, [x2]
+        add     eax, [sWidth]
+        cmp     edi, eax
+        jg      .StartLoop
+        sub     eax, [sWidth]
+        sub     eax, [sWidth]
+        cmp     edi, eax
+        jl      .StartLoop
 
 EndProc:
         ret
