@@ -1,6 +1,7 @@
 # BleenControl
 
 This program is designed for remote control of a computer. It allows users to manage and control their computer from a remote location.
+It was written using assembly as a university project for the purpose to show oppurtunities of this language.
 
 ## Features
 
@@ -9,6 +10,7 @@ This program is designed for remote control of a computer. It allows users to ma
 - Control basic keyboard buttons
 - Support for pressing keys to use keyboard shortcuts or dragging objects with the mouse
 - The experimental "Smooth Mouse" function slows down the transmission slightly, but makes the mouse movement smoother
+- Self-made interframe encoding
 
 ## Installation
 
